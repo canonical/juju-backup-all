@@ -1,0 +1,5 @@
+.idea/
+.tox/
+report/
+venv*/
+*.egg-info/
