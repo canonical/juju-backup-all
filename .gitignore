@@ -3,3 +3,4 @@
 report/
 venv*/
 *.egg-info/
+juju-backups/
