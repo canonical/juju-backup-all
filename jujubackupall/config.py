@@ -17,39 +17,34 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Config for backups passed in by operator."""
-import argparse
 from typing import List
-
-from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 
 
 class Config:
-    def __init__(self):
-        parser = argparse.ArgumentParser(description='Get a backup of all things Juju.')
-        parser.add_argument('-o', '--output-directory', dest='output_dir', default='juju-backups')
-        parser.add_argument('-c', '--charm', dest='charms', action='append', choices=SUPPORTED_BACKUP_CHARMS)
-        group = parser.add_mutually_exclusive_group()
-        group.add_argument('-C', '--controller', dest='controllers', action='append')
-        group.add_argument('-A', '--all-controllers', dest='all_controllers', action='store_true')
-        self.args = parser.parse_args()
-
-    @property
-    def output_dir(self) -> str:
-        return self.args.output_dir
-
-    @property
-    def charms(self) -> List[str]:
-        return self.args.charms
-
-    @property
-    def controllers(self) -> List[str]:
-        return self.args.controllers
+    def __init__(self, args: dict):
+        self.args = args
 
     @property
     def all_controllers(self) -> bool:
-        return self.args.all_controllers
+        return self.args.get('all_controllers')
 
     @property
-    def current_controller(self) -> bool:
-        return not self.controllers and not self.controllers
+    def backup_controller(self) -> bool:
+        return self.args.get('backup_controller')
+
+    @property
+    def controllers(self) -> List[str]:
+        return self.args.get('controllers')
+
+    @property
+    def excluded_charms(self) -> List[str]:
+        return self.args.get('excluded_charms')
+
+    @property
+    def output_dir(self) -> str:
+        return self.args.get('output_dir')
+
+    @property
+    def use_current_controller(self) -> bool:
+        return not self.controllers and not self.all_controllers
 
