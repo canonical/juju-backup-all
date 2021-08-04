@@ -17,7 +17,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that processes the desired backups."""
-from contextlib import contextmanager
 from pathlib import Path
 import logging
 from typing import List, NamedTuple
