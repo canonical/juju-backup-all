@@ -10,6 +10,10 @@ functional:
 		@echo Executing functional tests with: $(FUNCTEST_VARS) tox -e functional
 		@$(FUNCTEST_VARS) tox -e functional
 
+unit:
+		@echo Executing unit tests with coverage reports
+		@tox -e unit
+
 venv:
 		@echo "Creating venv. Grabbing requirements.txt from root, tests/unit and tests/functional"
 		@test -d venv-all || python3 -m venv venv-all
