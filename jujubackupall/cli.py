@@ -20,12 +20,9 @@
 import argparse
 import logging
 
-from juju import loop
-
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 from jujubackupall.process import BackupProcessor
-
 
 logging.basicConfig(level=logging.INFO)
 

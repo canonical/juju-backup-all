@@ -17,14 +17,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides utility functions."""
-from contextlib import contextmanager
 import json
 import os
 import subprocess
+from contextlib import contextmanager
 from typing import List
 
-from juju.loop import run as run_async
 from juju.controller import Controller
+from juju.loop import run as run_async
 from juju.model import Model
 from juju.unit import Unit
 

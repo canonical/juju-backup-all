@@ -6,3 +6,4 @@ venv*/
 juju-backups/
 htmlcov/
 .coverage
+__pycache__
