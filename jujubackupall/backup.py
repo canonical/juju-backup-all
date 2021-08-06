@@ -29,7 +29,7 @@ from juju.unit import Unit
 
 from jujubackupall.utils import ensure_path_exists
 
-CharmBackupType = TypeVar('CharmBackupType', bound='CharmBackup')
+CharmBackupType = TypeVar("CharmBackupType", bound="CharmBackup")
 logger = getLogger(__name__)
 
 
@@ -53,7 +53,7 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
 
 
 class MysqlBackup(CharmBackup, metaclass=ABCMeta):
-    backup_action_name = 'mysqldump'
+    backup_action_name = "mysqldump"
     _mysqldump_file_path = None
 
     @property
@@ -67,21 +67,21 @@ class MysqlBackup(CharmBackup, metaclass=ABCMeta):
     def backup(self):
         backup_action: Action = run_async(self.unit.run_action(self.backup_action_name))
         run_async(backup_action.wait())
-        self.mysqldump_file_path = Path(backup_action.safe_data.get('results').get('mysqldump-file'))
+        self.mysqldump_file_path = Path(backup_action.safe_data.get("results").get("mysqldump-file"))
 
     def download_backup(self, save_path: Path):
         filename = self.mysqldump_file_path.name
-        tmp_path = Path('/tmp') / filename
-        cp_chown_command = 'sudo cp {} /tmp && sudo chown ubuntu:ubuntu {}'.format(self.mysqldump_file_path, tmp_path)
-        run_async(self.unit.ssh(command=cp_chown_command, user='ubuntu'))
+        tmp_path = Path("/tmp") / filename
+        cp_chown_command = "sudo cp {} /tmp && sudo chown ubuntu:ubuntu {}".format(self.mysqldump_file_path, tmp_path)
+        run_async(self.unit.ssh(command=cp_chown_command, user="ubuntu"))
         ensure_path_exists(path=save_path)
         run_async(self.unit.scp_from(source=str(tmp_path), destination=str(save_path)))
-        rm_command = 'sudo rm -r {} {}'.format(self.mysqldump_file_path, tmp_path)
-        run_async(self.unit.ssh(command=rm_command, user='ubuntu'))
+        rm_command = "sudo rm -r {} {}".format(self.mysqldump_file_path, tmp_path)
+        run_async(self.unit.ssh(command=rm_command, user="ubuntu"))
 
 
 class MysqlInnodbBackup(MysqlBackup):
-    charm_name = 'mysql-innodb-cluster'
+    charm_name = "mysql-innodb-cluster"
 
     def backup(self):
         super().backup()
@@ -91,23 +91,23 @@ class MysqlInnodbBackup(MysqlBackup):
 
 
 class PerconaClusterBackup(MysqlBackup):
-    charm_name = 'percona-cluster'
+    charm_name = "percona-cluster"
 
     def _set_pxc_mode(self, mode: str):
         set_pxc_strict_mode_permissive_action: Action = run_async(
-            self.unit.run_action('set-pxc-strict-mode', mode=mode)
+            self.unit.run_action("set-pxc-strict-mode", mode=mode)
         )
         run_async(set_pxc_strict_mode_permissive_action.wait())
-        assert set_pxc_strict_mode_permissive_action.status == 'completed'
+        assert set_pxc_strict_mode_permissive_action.status == "completed"
 
     def backup(self):
-        self._set_pxc_mode('MASTER')
+        self._set_pxc_mode("MASTER")
         super().backup()
-        self._set_pxc_mode('ENFORCING')
+        self._set_pxc_mode("ENFORCING")
 
 
 class EtcdBackup(CharmBackup):
-    charm_name = 'etcd'
+    charm_name = "etcd"
 
     def backup(self):
         pass
@@ -117,7 +117,7 @@ class EtcdBackup(CharmBackup):
 
 
 class PostgresqlBackup(CharmBackup):
-    charm_name = 'postgresql'
+    charm_name = "postgresql"
 
     def backup(self):
         pass
@@ -127,7 +127,7 @@ class PostgresqlBackup(CharmBackup):
 
 
 class SwiftBackup(CharmBackup):
-    charm_name = 'swift-proxy'
+    charm_name = "swift-proxy"
 
     def backup(self):
         pass
@@ -137,7 +137,6 @@ class SwiftBackup(CharmBackup):
 
 
 class JujuControllerBackup(BaseBackup):
-
     def __init__(self, controller: Controller, save_path=Path()):
         super().__init__()
         self.controller = controller
@@ -158,4 +157,4 @@ def get_charm_backup_instance(charm_name: str, unit: Unit) -> CharmBackupType:
         return PostgresqlBackup(unit=unit)
     if charm_name == SwiftBackup.charm_name:
         return SwiftBackup(unit=unit)
-    raise Exception('{} is not a supported charm.'.format(charm_name))
+    raise Exception("{} is not a supported charm.".format(charm_name))

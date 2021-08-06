@@ -26,23 +26,23 @@ class Config:
 
     @property
     def all_controllers(self) -> bool:
-        return self.args.get('all_controllers')
+        return self.args.get("all_controllers")
 
     @property
     def backup_controller(self) -> bool:
-        return self.args.get('backup_controller')
+        return self.args.get("backup_controller")
 
     @property
     def controllers(self) -> List[str]:
-        return self.args.get('controllers')
+        return self.args.get("controllers")
 
     @property
     def excluded_charms(self) -> List[str]:
-        return self.args.get('excluded_charms')
+        return self.args.get("excluded_charms")
 
     @property
     def output_dir(self) -> str:
-        return self.args.get('output_dir')
+        return self.args.get("output_dir")
 
     @property
     def use_current_controller(self) -> bool:
