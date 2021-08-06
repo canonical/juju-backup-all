@@ -1,4 +1,4 @@
-"""Test backup-all-the-things on multi-model controller"""
+"""Test juju-backup-all on multi-model controller"""
 import asyncio
 import glob
 from pathlib import Path
@@ -25,11 +25,11 @@ async def test_mysql_innodb_backup(mysql_innodb_model: JujuModel, tmp_path: Path
     controller_name = controller.controller_name
     mysql_innodb_app_name = 'mysql'
     output = subprocess.check_output(
-        'juju-backup-all --output-dir {} -C {} -c mysql-innodb-cluster'.format(tmp_path, controller_name),
+        'juju-backup-all -o {} -e percona-cluster -e etcd -e postgresql'.format(tmp_path),
         shell=True
     )
     expected_output_dir = (tmp_path / controller_name / model_name / mysql_innodb_app_name)
-    assert str(tmp_path) in str(output)
+    # assert str(tmp_path) in str(output)
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + '/mysqldump-all-databases*.gz')
 
@@ -40,10 +40,10 @@ async def test_percona_backup(percona_cluster_model: JujuModel, percona_cluster_
     controller_name = controller.controller_name
     percona_app_name = 'percona-cluster'
     output = subprocess.check_output(
-        'juju-backup-all --output-dir {} -C {} -c percona-cluster'.format(tmp_path, controller_name),
+        'juju-backup-all -o {} -e etcd -e mysql-innodb-cluster -e postgresql'.format(tmp_path),
         shell=True
     )
     expected_output_dir = (tmp_path / controller_name / model_name / percona_app_name)
-    assert str(tmp_path) in str(output)
+    # assert str(tmp_path) in str(output)
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + '/mysqldump-all-databases*.gz'.format(percona_app_name))

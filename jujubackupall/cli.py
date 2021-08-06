@@ -18,10 +18,16 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Main entry point for juju-backup-all CLI tool."""
 import argparse
+import logging
+
+from juju import loop
 
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 from jujubackupall.process import BackupProcessor
+
+
+logging.basicConfig(level=logging.INFO)
 
 
 class Cli:
@@ -58,3 +64,11 @@ def make_cli_parser():
     group.add_argument('-A', '--all-controllers', action='store_true')
     return parser
 
+
+def main():
+    cli = Cli()
+    cli.run()
+
+
+if __name__ == '__main__':
+    main()
