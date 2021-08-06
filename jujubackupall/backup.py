@@ -22,13 +22,12 @@ from logging import getLogger
 from pathlib import Path
 from typing import TypeVar
 
-from juju.loop import run as run_async
 from juju.action import Action
-from juju.unit import Unit
 from juju.controller import Controller
+from juju.loop import run as run_async
+from juju.unit import Unit
 
 from jujubackupall.utils import ensure_path_exists
-
 
 CharmBackupType = TypeVar('CharmBackupType', bound='CharmBackup')
 logger = getLogger(__name__)
@@ -36,6 +35,7 @@ logger = getLogger(__name__)
 
 class BaseBackup(object, metaclass=ABCMeta):
     """BaseBackup metaclass for backups."""
+
     @abstractmethod
     def backup(self):
         pass
@@ -55,11 +55,11 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
 class MysqlBackup(CharmBackup, metaclass=ABCMeta):
     backup_action_name = 'mysqldump'
     _mysqldump_file_path = None
-    
+
     @property
     def mysqldump_file_path(self):
         return self._mysqldump_file_path
-    
+
     @mysqldump_file_path.setter
     def mysqldump_file_path(self, path):
         self._mysqldump_file_path = path
