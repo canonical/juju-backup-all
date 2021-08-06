@@ -37,7 +37,7 @@ class Cli:
 
     def run(self):
         backup_processor = BackupProcessor(self.config)
-        loop.run(backup_processor.process_backups())
+        backup_processor.process_backups()
 
     @staticmethod
     def _parse_args() -> dict:

@@ -17,40 +17,41 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides utility functions."""
-from contextlib import asynccontextmanager
+from contextlib import contextmanager
 import json
 import os
 import subprocess
 from typing import List
 
+from juju.loop import run as run_async
 from juju.controller import Controller
 from juju.model import Model
 from juju.unit import Unit
 
 
-@asynccontextmanager
-async def connect_controller(controller_name: str) -> Controller:
+@contextmanager
+def connect_controller(controller_name: str) -> Controller:
     """Handle connecting to and disconnecting from a Juju Controller."""
     controller = Controller()
     if controller_name:
-        await controller.connect(controller_name)
+        run_async(controller.connect(controller_name))
     else:
-        await controller.connect()
+        run_async(controller.connect())
     try:
         yield controller
     finally:
-        await controller.disconnect()
+        run_async(controller.disconnect())
 
 
-@asynccontextmanager
-async def connect_model(model_name: str) -> Model:
+@contextmanager
+def connect_model(model_name: str) -> Model:
     """Handle connecting to and disconnecting from a Juju Model."""
     model = Model()
-    await model.connect(model_name)
+    run_async(model.connect(model_name))
     try:
         yield model
     finally:
-        await model.disconnect()
+        run_async(model.disconnect())
 
 
 def ensure_path_exists(path):
@@ -64,9 +65,9 @@ def get_all_controllers() -> List[str]:
     return juju_controller_names
 
 
-async def get_leader(units: List[Unit]) -> Unit:
+def get_leader(units: List[Unit]) -> Unit:
     for unit in units:
-        is_leader = await unit.is_leader_from_status()
+        is_leader = run_async(unit.is_leader_from_status())
         if is_leader:
             return unit
 
