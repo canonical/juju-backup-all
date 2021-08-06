@@ -17,19 +17,24 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that processes the desired backups."""
-from pathlib import Path
 import logging
+from pathlib import Path
 from typing import List, NamedTuple
 
 from juju.controller import Controller
 from juju.loop import run as run_async
 from juju.model import Model
 
-from jujubackupall.backup import get_charm_backup_instance, JujuControllerBackup
+from jujubackupall.backup import JujuControllerBackup, get_charm_backup_instance
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
-from jujubackupall.utils import parse_charm_name, get_all_controllers, get_leader, connect_controller, connect_model
-
+from jujubackupall.utils import (
+    connect_controller,
+    connect_model,
+    get_all_controllers,
+    get_leader,
+    parse_charm_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +85,7 @@ class BackupProcessor:
 
 class ControllerProcessor:
     def __init__(self, controller: Controller, apps_to_backup: List[str], base_output_path: Path):
-        """ Processes all backups within a connected Juju controller.
+        """Process all backups within a connected Juju controller.
 
         :param controller: connected Juju controller
         :param apps_to_backup: list of apps to backup
@@ -114,7 +119,7 @@ class ControllerProcessor:
                 logger.info('Backing up {} app ({} charm)'.format(app_name, charm_name))
                 charm_backup_instance.backup()
                 logger.info('App {} backed up'.format(app_name))
-                logger.info('Downloading backups'.format(app_name))
+                logger.info('Downloading backups')
                 charm_backup_instance.download_backup(self.generate_full_backup_path(model_name, app_name))
                 logger.info('Backups downloaded to {}'.format(self.generate_full_backup_path(model_name, app_name)))
 
