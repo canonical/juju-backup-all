@@ -18,4 +18,4 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Contains constants used throughout the package."""
 
-SUPPORTED_BACKUP_CHARMS = ['mysql-innodb-cluster', 'percona-cluster', 'etcd', 'postgresql']
+SUPPORTED_BACKUP_CHARMS = ["mysql-innodb-cluster", "percona-cluster", "etcd", "postgresql"]

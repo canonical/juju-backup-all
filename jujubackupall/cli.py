@@ -45,20 +45,21 @@ class Cli:
             backup_controller=args.backup_controller,
             excluded_charms=args.excluded_charms,
             controllers=args.controllers,
-            output_dir=args.output_dir
+            output_dir=args.output_dir,
         )
         return args_dict
 
 
 def make_cli_parser():
-    parser = argparse.ArgumentParser(description='Get a backup of all things Juju.')
-    parser.add_argument('-o', '--output-directory', dest='output_dir', default='juju-backups')
-    parser.add_argument('-e', '--exclude-charm', dest='excluded_charms', action='append',
-                        choices=SUPPORTED_BACKUP_CHARMS)
-    parser.add_argument('-x', '--exclude-controller-backup', dest='backup_controller', action='store_false')
+    parser = argparse.ArgumentParser(description="Get a backup of all things Juju.")
+    parser.add_argument("-o", "--output-directory", dest="output_dir", default="juju-backups")
+    parser.add_argument(
+        "-e", "--exclude-charm", dest="excluded_charms", action="append", choices=SUPPORTED_BACKUP_CHARMS
+    )
+    parser.add_argument("-x", "--exclude-controller-backup", dest="backup_controller", action="store_false")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-C', '--controller', dest='controllers', action='append')
-    group.add_argument('-A', '--all-controllers', action='store_true')
+    group.add_argument("-C", "--controller", dest="controllers", action="append")
+    group.add_argument("-A", "--all-controllers", action="store_true")
     return parser
 
 
@@ -67,5 +68,5 @@ def main():
     cli.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

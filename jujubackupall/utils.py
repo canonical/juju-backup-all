@@ -59,9 +59,9 @@ def ensure_path_exists(path):
 
 
 def get_all_controllers() -> List[str]:
-    juju_controllers_output = subprocess.check_output('juju controllers --format json', shell=True)
+    juju_controllers_output = subprocess.check_output("juju controllers --format json", shell=True)
     juju_controllers_json = json.load(juju_controllers_output)
-    juju_controller_names = [key for key in juju_controllers_json.get('controllers').keys()]
+    juju_controller_names = [key for key in juju_controllers_json.get("controllers").keys()]
     return juju_controller_names
 
 
@@ -73,7 +73,7 @@ def get_leader(units: List[Unit]) -> Unit:
 
 
 def parse_charm_name(charm_url: str) -> str:
-    parsed_charm_name = charm_url.split(':')[1].rsplit('-', 1)[0]
-    if '/' in parsed_charm_name:
-        return parsed_charm_name.split('/')[-1]
+    parsed_charm_name = charm_url.split(":")[1].rsplit("-", 1)[0]
+    if "/" in parsed_charm_name:
+        return parsed_charm_name.split("/")[-1]
     return parsed_charm_name

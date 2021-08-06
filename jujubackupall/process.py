@@ -69,15 +69,15 @@ class BackupProcessor:
             self._controller_names = self.config.controllers
         elif self.config.use_current_controller:
             # backup the current controller by passing blank string
-            self._controller_names = ['']
+            self._controller_names = [""]
         return self._controller_names
 
     def process_backups(self):
         for controller_name in self.controller_names:
             with connect_controller(controller_name) as controller:
-                controller_processor = ControllerProcessor(controller,
-                                                           self.apps_to_backup,
-                                                           Path(self.config.output_dir))
+                controller_processor = ControllerProcessor(
+                    controller, self.apps_to_backup, Path(self.config.output_dir)
+                )
                 controller_processor.backup_models()
                 if self.config.backup_controller:
                     controller_processor.backup_controller()
@@ -97,8 +97,7 @@ class ControllerProcessor:
 
     def backup_controller(self):
         controller_backup_save_path = self.base_output_path / self.controller.controller_name
-        controller_backup = JujuControllerBackup(controller=self.controller,
-                                                 save_path=controller_backup_save_path)
+        controller_backup = JujuControllerBackup(controller=self.controller, save_path=controller_backup_save_path)
         controller_backup.backup()
 
     def backup_models(self):
@@ -110,18 +109,17 @@ class ControllerProcessor:
     def backup_apps(self, model: JujuModel):
         model_name, model = model.name, model.model
         for app_name, app in model.applications.items():
-            charm_url = app.data.get('charm-url')
+            charm_url = app.data.get("charm-url")
             charm_name = parse_charm_name(charm_url)
             if charm_name in self.apps_to_backup:
                 leader_unit = get_leader(app.units)
-                charm_backup_instance = get_charm_backup_instance(charm_name=charm_name,
-                                                                  unit=leader_unit)
-                logger.info('Backing up {} app ({} charm)'.format(app_name, charm_name))
+                charm_backup_instance = get_charm_backup_instance(charm_name=charm_name, unit=leader_unit)
+                logger.info("Backing up {} app ({} charm)".format(app_name, charm_name))
                 charm_backup_instance.backup()
-                logger.info('App {} backed up'.format(app_name))
-                logger.info('Downloading backups')
+                logger.info("App {} backed up".format(app_name))
+                logger.info("Downloading backups")
                 charm_backup_instance.download_backup(self.generate_full_backup_path(model_name, app_name))
-                logger.info('Backups downloaded to {}'.format(self.generate_full_backup_path(model_name, app_name)))
+                logger.info("Backups downloaded to {}".format(self.generate_full_backup_path(model_name, app_name)))
 
     def generate_full_backup_path(self, model_name: str, app_name: str) -> Path:
         return self.base_output_path / self.controller.controller_name / model_name / app_name
