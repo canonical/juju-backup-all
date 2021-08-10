@@ -75,11 +75,15 @@ class BackupProcessor:
     def process_backups(self):
         for controller_name in self.controller_names:
             with connect_controller(controller_name) as controller:
+                logger.info("[{}] Processing backups.".format(controller.controller_name))
                 controller_processor = ControllerProcessor(
                     controller, self.apps_to_backup, Path(self.config.output_dir)
                 )
+                logger.info("[{}] Backing up models.".format(controller.controller_name))
                 controller_processor.backup_models()
+                logger.info("[{}] Models backed up.".format(controller.controller_name))
                 if self.config.backup_controller:
+                    logger.info("[{}] Backing up controller.".format(controller.controller_name))
                     controller_processor.backup_controller()
 
 
