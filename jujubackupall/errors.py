@@ -17,3 +17,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module containing package specific errors."""
+import subprocess
+
+
+class BackupError(Exception):
+    pass
+
+
+class JujuControllerBackupError(BackupError):
+    def __init__(self, cmd_error: subprocess.CalledProcessError):
+        super().__init__()
+        self.cmd_error = cmd_error
+
+    def __str__(self):
+        """Return string representation of JujuControllerBackupError."""
+        return "{}: {}\nCommand Output: {}".format(
+            self.__class__.__name__, self.cmd_error, self.cmd_error.output.decode()
+        )

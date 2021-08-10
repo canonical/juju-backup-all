@@ -19,3 +19,4 @@
 """Contains constants used throughout the package."""
 
 SUPPORTED_BACKUP_CHARMS = ["mysql-innodb-cluster", "percona-cluster", "etcd", "postgresql"]
+MAX_CONTROLLER_BACKUP_RETRIES = 3

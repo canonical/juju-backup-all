@@ -21,6 +21,7 @@ import json
 import os
 import subprocess
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import List
 
 from juju.controller import Controller
@@ -77,3 +78,7 @@ def parse_charm_name(charm_url: str) -> str:
     if "/" in parsed_charm_name:
         return parsed_charm_name.split("/")[-1]
     return parsed_charm_name
+
+
+def get_datetime_string() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
