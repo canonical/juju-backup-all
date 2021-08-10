@@ -24,7 +24,8 @@ from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 from jujubackupall.process import BackupProcessor
 
-logging.basicConfig(level=logging.INFO)
+FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
+logging.basicConfig(format=FORMAT, level=logging.INFO)
 
 
 class Cli:

@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides the backup classes for the various charms."""
+import subprocess
 from abc import ABCMeta, abstractmethod
 from logging import getLogger
 from pathlib import Path
@@ -27,7 +28,9 @@ from juju.controller import Controller
 from juju.loop import run as run_async
 from juju.unit import Unit
 
-from jujubackupall.utils import ensure_path_exists
+from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
+from jujubackupall.errors import JujuControllerBackupError
+from jujubackupall.utils import ensure_path_exists, get_datetime_string
 
 CharmBackupType = TypeVar("CharmBackupType", bound="CharmBackup")
 logger = getLogger(__name__)
@@ -143,7 +146,48 @@ class JujuControllerBackup(BaseBackup):
         self.save_path = save_path
 
     def backup(self):
-        pass
+        """Run `juju create-backup` against Juju controller.
+
+        As juju controller backups tend to be flaky, this method will retry the backups.
+        If backups fail all retries, a JujuControllerBackupError is raised with info on the
+        last failure.
+
+        :raise: JujuControllerBackupError: If all tried backups fail
+        """
+        filename = "juju-controller-backup-{}.tar.gz".format(get_datetime_string())
+        save_file_path = self.save_path / filename
+        command = "juju create-backup -m {}:controller --filename {}".format(
+            self.controller.controller_name, save_file_path
+        )
+        ensure_path_exists(path=self.save_path)
+
+        def try_backup():
+            output = subprocess.check_output(command.split(), stderr=subprocess.STDOUT)
+            logger.debug("juju create-backup output:\n{}".format(output.decode() if output else ""))
+
+        # retry controller backup commands. If all fail, raise last error
+        last_error = None
+        for i in range(MAX_CONTROLLER_BACKUP_RETRIES):
+            try:
+                logger.info("[{}] Attempt #{} for controller backup.".format(self.controller.controller_name, i + 1))
+                try_backup()
+                break
+            except subprocess.CalledProcessError as called_proc_error:
+                error_msg = "[{}] Attempt #{} Encountered controller backup error: {}\nCommand output: {}".format(
+                    self.controller.controller_name,
+                    i + 1,
+                    called_proc_error,
+                    called_proc_error.output.decode() if called_proc_error.output else "",
+                )
+                last_error = called_proc_error
+                logger.warning("{}".format(error_msg))
+                continue
+        else:
+            error_msg = "[{}] All {} controller backup attempts failed.\nLast error: {}".format(
+                self.controller.controller_name, MAX_CONTROLLER_BACKUP_RETRIES, last_error
+            )
+            logger.error(error_msg)
+            raise JujuControllerBackupError(last_error)
 
 
 def get_charm_backup_instance(charm_name: str, unit: Unit) -> CharmBackupType:

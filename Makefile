@@ -1,18 +1,27 @@
 FUNCTEST_VARS=PYTEST_KEEP_MODELS=$(PYTEST_KEEP_MODELS) \
 			  PYTEST_MYSQL_MODEL=$(PYTEST_MYSQL_MODEL) \
-			  PYTEST_PERCONA_MODEL=$(PYTEST_PERCONA_MODEL)
+			  PYTEST_PERCONA_MODEL=$(PYTEST_PERCONA_MODEL) \
+			  JUJU_DATA=$(JUJU_DATA)
 
 ifneq ($(PYTEST_SELECT_TESTS),)
 	FUNCTEST_VARS+=PYTEST_SELECT_TESTS="$(PYTESTS_SELECT_TESTS)"
 endif
+ifeq ($(JUJU_DATA),)
+	JUJU_DATA=~/.local/share/juju
+endif
 
 functional:
 		@echo Executing functional tests with: $(FUNCTEST_VARS) tox -e functional
+		@echo Using JUJU_DATA=$(JUJU_DATA)
 		@$(FUNCTEST_VARS) tox -e functional
 
 unit:
 		@echo Executing unit tests with coverage reports
 		@tox -e unit
+
+unit-html-report: unit
+		@echo Generating html unit test coverage report
+		@tox -e htmlreport
 
 venv:
 		@echo "Creating venv. Grabbing requirements.txt from root, tests/unit and tests/functional"

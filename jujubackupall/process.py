@@ -28,6 +28,7 @@ from juju.model import Model
 from jujubackupall.backup import JujuControllerBackup, get_charm_backup_instance
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
+from jujubackupall.errors import JujuControllerBackupError
 from jujubackupall.utils import (
     connect_controller,
     connect_model,
@@ -75,11 +76,15 @@ class BackupProcessor:
     def process_backups(self):
         for controller_name in self.controller_names:
             with connect_controller(controller_name) as controller:
+                logger.info("[{}] Processing backups.".format(controller.controller_name))
                 controller_processor = ControllerProcessor(
                     controller, self.apps_to_backup, Path(self.config.output_dir)
                 )
+                logger.info("[{}] Backing up models.".format(controller.controller_name))
                 controller_processor.backup_models()
+                logger.info("[{}] Models backed up.".format(controller.controller_name))
                 if self.config.backup_controller:
+                    logger.info("[{}] Backing up controller.".format(controller.controller_name))
                     controller_processor.backup_controller()
 
 
@@ -98,7 +103,13 @@ class ControllerProcessor:
     def backup_controller(self):
         controller_backup_save_path = self.base_output_path / self.controller.controller_name
         controller_backup = JujuControllerBackup(controller=self.controller, save_path=controller_backup_save_path)
-        controller_backup.backup()
+        try:
+            controller_backup.backup()
+        except JujuControllerBackupError as controller_backup_error:
+            warn_msg = "[{}] Juju controller backup failed: {}".format(
+                self.controller.controller_name, controller_backup_error
+            )
+            logger.warning(warn_msg)
 
     def backup_models(self):
         model_names: List[str] = run_async(self.controller.list_models())
