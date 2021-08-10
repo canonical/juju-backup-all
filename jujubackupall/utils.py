@@ -59,7 +59,7 @@ def ensure_path_exists(path):
 
 
 def get_all_controllers() -> List[str]:
-    juju_controllers_output = subprocess.check_output("juju controllers --format json", shell=True)
+    juju_controllers_output = subprocess.check_output("juju controllers --format json".split())
     juju_controllers_json = json.load(juju_controllers_output)
     juju_controller_names = [key for key in juju_controllers_json.get("controllers").keys()]
     return juju_controller_names

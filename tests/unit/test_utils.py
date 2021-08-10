@@ -66,7 +66,7 @@ class TestGetAllControllers(unittest.TestCase):
         }
         mock_json_load.return_value = controller_dict
         actual_controller_names = get_all_controllers()
-        mock_check_output.assert_called_with('juju controllers --format json', shell=True)
+        mock_check_output.assert_called_with('juju controllers --format json'.split())
         self.assertEqual(len(actual_controller_names), 2, 'assert excpected number of controller names returned')
         self.assertIn(controller_name_1, actual_controller_names)
         self.assertIn(controller_name_2, actual_controller_names)
