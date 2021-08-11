@@ -33,6 +33,10 @@ class Config:
         return self.args.get("backup_controller")
 
     @property
+    def backup_juju_client_config(self) -> bool:
+        return self.args.get("backup_juju_client_config")
+
+    @property
     def controllers(self) -> List[str]:
         return self.args.get("controllers")
 
