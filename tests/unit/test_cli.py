@@ -10,6 +10,7 @@ from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 
 all_controllers = False
 backup_controller = True
+backup_juju_client_config = True
 controllers = ['controller1', 'controller2']
 excluded_charms = ['mysql']
 output_dir = 'my_output_dir'
@@ -22,6 +23,7 @@ class TestCli(unittest.TestCase):
         args_dict = dict(
             all_controllers=all_controllers,
             backup_controller=backup_controller,
+            backup_juju_client_config=backup_juju_client_config,
             controllers=controllers,
             excluded_charms=excluded_charms,
             output_dir=output_dir
