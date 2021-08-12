@@ -3,7 +3,9 @@
 import unittest
 from unittest.mock import patch, Mock
 
-from jujubackupall.utils import parse_charm_name, connect_controller, connect_model, get_all_controllers, get_leader
+from jujubackupall.errors import ActionError
+from jujubackupall.utils import parse_charm_name, connect_controller, connect_model, get_all_controllers, get_leader, \
+    check_output_unit_action
 
 
 class TestParseCharmName(unittest.TestCase):
@@ -83,6 +85,52 @@ class TestGetLeader(unittest.TestCase):
         actual_leader = get_leader(mock_units)
         mock_units[2].is_leader_from_status.assert_called_once()
         self.assertEqual(actual_leader, mock_units[2])
+
+
+class TestCheckOutputUnitAction(unittest.TestCase):
+    @patch('jujubackupall.utils.run_async')
+    def test_check_output_unit_action_success_no_params(self, mock_run_async: Mock):
+        action_name = "my-action"
+        safe_data = dict(status="completed")
+        mock_unit = Mock()
+        mock_action = Mock()
+        mock_action.safe_data = safe_data
+        mock_run_async.return_value = mock_action
+        result = check_output_unit_action(mock_unit, action_name)
+        self.assertEqual(mock_run_async.call_count, 2, "assert run_async called twice")
+        self.assertEqual(result, safe_data)
+        mock_unit.run_action.assert_called_once_with(action_name)
+        mock_action.wait.assert_called_once()
+
+    @patch('jujubackupall.utils.run_async')
+    def test_check_output_unit_action_success_with_params(self, mock_run_async: Mock):
+        action_name = "my-action"
+        action_params = dict(param_one="hello", param_two="world")
+        safe_data = dict(status="completed")
+        mock_unit = Mock()
+        mock_action = Mock()
+        mock_action.safe_data = safe_data
+        mock_run_async.return_value = mock_action
+        result = check_output_unit_action(mock_unit, action_name, **action_params)
+        self.assertEqual(mock_run_async.call_count, 2, "assert run_async called twice")
+        self.assertEqual(result, safe_data)
+        mock_unit.run_action.assert_called_once_with(action_name, **action_params)
+        mock_action.wait.assert_called_once()
+
+    @patch('jujubackupall.utils.run_async')
+    def test_check_output_unit_action_failure(self, mock_run_async: Mock):
+        action_name = "my-action"
+        failure_status = "failure"
+        failure_results = dict(status=failure_status)
+        safe_data = dict(status=failure_status, results=failure_results)
+        mock_unit = Mock()
+        mock_action = Mock()
+        mock_action.safe_data = safe_data
+        mock_run_async.return_value = mock_action
+        with self.assertRaises(ActionError) as context:
+            check_output_unit_action(mock_unit, action_name)
+        self.assertTrue(failure_status in str(context.exception))
+        self.assertTrue(context.exception.results(), failure_results)
 
 
 if __name__ == '__main__':
