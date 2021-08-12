@@ -19,6 +19,8 @@
 """Module containing package specific errors."""
 import subprocess
 
+from juju.action import Action
+
 
 class BackupError(Exception):
     pass
@@ -34,3 +36,23 @@ class JujuControllerBackupError(BackupError):
         return "{}: {}\nCommand Output: {}".format(
             self.__class__.__name__, self.cmd_error, self.cmd_error.output.decode()
         )
+
+
+class ActionError(Exception):
+    def __init__(self, action: Action):
+        super().__init__()
+        self.action = action
+
+    def __str__(self):
+        """Return string representation of ActionError."""
+        return "{}: Action '{}' on unit '{}' with parameters '{}' failed with status '{}' and message '{}'.".format(
+            self.__class__.__name__,
+            self.action.safe_data.get("name"),
+            self.action.safe_data.get("receiver"),
+            self.action.safe_data.get("parameters"),
+            self.action.safe_data.get("status"),
+            self.action.safe_data.get("message"),
+        )
+
+    def results(self) -> dict:
+        return self.action.safe_data.get("results")
