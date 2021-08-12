@@ -25,7 +25,7 @@ from juju.controller import Controller
 from juju.loop import run as run_async
 from juju.model import Model
 
-from jujubackupall.backup import JujuControllerBackup, get_charm_backup_instance
+from jujubackupall.backup import JujuControllerBackup, get_charm_backup_instance, JujuClientConfigBackup
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 from jujubackupall.errors import JujuControllerBackupError
@@ -74,6 +74,10 @@ class BackupProcessor:
         return self._controller_names
 
     def process_backups(self):
+        if self.config.backup_juju_client_config:
+            logger.info("Backing up Juju client config.")
+            backup_juju_client_config_inst = JujuClientConfigBackup(Path(self.config.output_dir))
+            backup_juju_client_config_inst.backup()
         for controller_name in self.controller_names:
             with connect_controller(controller_name) as controller:
                 logger.info("[{}] Processing backups.".format(controller.controller_name))
@@ -113,6 +117,7 @@ class ControllerProcessor:
 
     def backup_models(self):
         model_names: List[str] = run_async(self.controller.list_models())
+        logger.info("[{}] Models to process: {}".format(self.controller.controller_name, model_names))
         for model_name in model_names:
             with connect_model(model_name) as model:
                 self.backup_apps(JujuModel(name=model_name, model=model))

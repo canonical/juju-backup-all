@@ -17,6 +17,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides the backup classes for the various charms."""
+import os
+import shutil
 import subprocess
 from abc import ABCMeta, abstractmethod
 from logging import getLogger
@@ -188,6 +190,34 @@ class JujuControllerBackup(BaseBackup):
             )
             logger.error(error_msg)
             raise JujuControllerBackupError(last_error)
+
+
+class ClientConfigBackup(BaseBackup, metaclass=ABCMeta):
+    client_config_name: str = NotImplemented
+    client_config_location: Path = NotImplemented
+
+    def __init__(self, base_output_dir: Path):
+        self.base_output_dir = base_output_dir
+
+    def backup(self):
+        output_path = (
+            self.base_output_dir / "local_configs" / "{}-{}".format(self.client_config_name, get_datetime_string())
+        )
+        ensure_path_exists(output_path.parent)
+        shutil.make_archive(
+            base_name=str(output_path), format="gztar", root_dir=self.client_config_location.expanduser()
+        )
+        logger.info("{} client config backed up".format(self.client_config_name))
+
+
+class JujuClientConfigBackup(ClientConfigBackup):
+    client_config_name = "juju"
+    client_config_location = Path("~/.local/share/juju")
+
+    def __init__(self, base_output_dir: Path):
+        super().__init__(base_output_dir)
+        if os.environ.get("JUJU_DATA"):
+            self.client_config_location = Path(os.environ.get("JUJU_DATA"))
 
 
 def get_charm_backup_instance(charm_name: str, unit: Unit) -> CharmBackupType:

@@ -44,6 +44,7 @@ class Cli:
         args_dict = dict(
             all_controllers=args.all_controllers,
             backup_controller=args.backup_controller,
+            backup_juju_client_config=args.backup_juju_client_config,
             excluded_charms=args.excluded_charms,
             controllers=args.controllers,
             output_dir=args.output_dir,
@@ -58,6 +59,9 @@ def make_cli_parser():
         "-e", "--exclude-charm", dest="excluded_charms", action="append", choices=SUPPORTED_BACKUP_CHARMS
     )
     parser.add_argument("-x", "--exclude-controller-backup", dest="backup_controller", action="store_false")
+    parser.add_argument(
+        "-j", "--exclude-juju-client-config-backup", dest="backup_juju_client_config", action="store_false"
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-C", "--controller", dest="controllers", action="append")
     group.add_argument("-A", "--all-controllers", action="store_true")

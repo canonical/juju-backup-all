@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 from jujubackupall.backup import (
     MysqlInnodbBackup, PerconaClusterBackup, get_charm_backup_instance,
-    PostgresqlBackup, EtcdBackup, SwiftBackup, JujuControllerBackup
+    PostgresqlBackup, EtcdBackup, SwiftBackup, JujuControllerBackup, JujuClientConfigBackup
 )
 from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
 from jujubackupall.errors import JujuControllerBackupError
@@ -92,3 +92,34 @@ class TestJujuControllerBackup(unittest.TestCase):
             MAX_CONTROLLER_BACKUP_RETRIES,
             "assert check_output was called {} times.".format(MAX_CONTROLLER_BACKUP_RETRIES)
         )
+
+
+class TestJujuClientConfigBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.os")
+    def test_juju_client_config_backup_create_no_environ(self, mock_os: Mock):
+        output_path = Path('mypath')
+        mock_os.environ.get.return_value = None
+        class_client_config_location = JujuClientConfigBackup.client_config_location
+        juju_config_backup_inst = JujuClientConfigBackup(output_path)
+        self.assertEqual(juju_config_backup_inst.client_config_location, class_client_config_location)
+
+    @patch("jujubackupall.backup.os")
+    def test_juju_client_config_backup_create_with_environ(self, mock_os: Mock):
+        env_path = "alt-path"
+        output_path = Path('mypath')
+        mock_os.environ.get.return_value = env_path
+        juju_config_backup_inst = JujuClientConfigBackup(output_path)
+        self.assertEqual(juju_config_backup_inst.client_config_location, Path(env_path))
+
+    @patch("jujubackupall.backup.shutil")
+    @patch("jujubackupall.backup.ensure_path_exists")
+    @patch("jujubackupall.backup.os")
+    def test_juju_client_config_backup(
+            self, mock_os: Mock, mock_ensure_path: Mock, mock_shutil: Mock
+    ):
+        output_path = Path('my/path')
+        mock_os.environ.get.return_value = None
+        juju_config_backup_inst = JujuClientConfigBackup(output_path)
+        juju_config_backup_inst.backup()
+        mock_ensure_path.assert_called_once()
+        mock_shutil.make_archive.assert_called_once()

@@ -15,6 +15,7 @@ class TestBackupProcessor(unittest.TestCase):
     @patch('jujubackupall.process.Config', return_value=Mock())
     def setUp(self, mock_config) -> None:
         self.mock_config = mock_config
+        self.mock_config.backup_juju_client_config = False
 
     def test_apps_to_backup(self):
         all_charms_but_mysql_innodb = list(set(SUPPORTED_BACKUP_CHARMS) - {'mysql-innodb-cluster'})
@@ -118,6 +119,26 @@ class TestBackupProcessor(unittest.TestCase):
             'assert backup_models called correct number of times'
         )
         mock_controller_processor.backup_controller.assert_not_called()
+
+    @patch('jujubackupall.process.JujuClientConfigBackup')
+    def test_process_backups_backup_juju_config(
+            self, mock_juju_config_backup: Mock
+    ):
+        self.mock_config.all_controllers = False
+        self.mock_config.use_current_controller = False
+        self.mock_config.backup_controller = False
+        self.mock_config.backup_juju_client_config = True
+        self.mock_config.controllers = []
+        self.mock_config.output_dir = 'juju-backups'
+
+        mock_juju_config_backup_inst = Mock()
+        mock_juju_config_backup.return_value = mock_juju_config_backup_inst
+
+        backup_processor = BackupProcessor(self.mock_config)
+        backup_processor._controller_names = []
+        backup_processor.process_backups()
+        mock_juju_config_backup.assert_called_with(Path(self.mock_config.output_dir))
+        mock_juju_config_backup_inst.backup.assert_called_once()
 
 
 class TestControllerProcessor(unittest.TestCase):

@@ -21,7 +21,7 @@ from juju.errors import JujuConnectionError
 JujuModel = namedtuple('JujuModel', ['model_name', 'model'])
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def event_loop():
     """Override the default pytest event loop to allow for fixtures using a broader scope."""
     loop = asyncio.get_event_loop_policy().new_event_loop()
@@ -32,7 +32,7 @@ def event_loop():
     asyncio.set_event_loop(None)
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope='session', autouse=True)
 async def controller():
     """Connect to the current controller."""
     controller = Controller()
@@ -41,7 +41,7 @@ async def controller():
     await controller.disconnect()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session", autouse=True)
 async def mysql_innodb_model(controller):
     """Return the MYSQL model for the test."""
     juju_model = await _get_or_create_model(controller, app_name='mysql', env_var='PYTEST_MYSQL_MODEL')
@@ -51,14 +51,13 @@ async def mysql_innodb_model(controller):
         await _cleanup_model(controller, juju_model.model_name)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session", autouse=True)
 async def percona_cluster_model(controller):
     """Return the percona-cluster model for the test."""
     juju_model = await _get_or_create_model(controller, app_name='percona-cluster', env_var='PYTEST_PERCONA_MODEL')
     yield juju_model
     await juju_model.model.disconnect()
     if not os.getenv("PYTEST_KEEP_MODELS"):
-        await _cleanup_model(controller, juju_model.model_name)
         await _cleanup_model(controller, juju_model.model_name)
 
 
