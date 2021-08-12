@@ -24,10 +24,13 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import List
 
+from juju.action import Action
 from juju.controller import Controller
 from juju.loop import run as run_async
 from juju.model import Model
 from juju.unit import Unit
+
+from jujubackupall.errors import ActionError
 
 
 @contextmanager
@@ -82,3 +85,19 @@ def parse_charm_name(charm_url: str) -> str:
 
 def get_datetime_string() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+
+
+def check_output_unit_action(unit: Unit, action_name: str, **params) -> dict:
+    backup_action: Action = run_async(unit.run_action(action_name, **params))
+    run_async(backup_action.wait())
+    if backup_action.safe_data.get("status") != "completed":
+        raise ActionError(backup_action)
+    return backup_action.safe_data
+
+
+def ssh_run_on_unit(unit: Unit, command: str, user="ubuntu"):
+    run_async(unit.ssh(command=command, user=user))
+
+
+def scp_from_unit(unit: Unit, source: str, destination: str):
+    run_async(unit.scp_from(source=source, destination=destination))
