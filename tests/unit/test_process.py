@@ -178,10 +178,17 @@ class TestControllerProcessor(unittest.TestCase):
         )
         mock_juju_controller_backup_inst.backup.assert_called_once()
 
+    @patch('jujubackupall.process.ControllerProcessor._log')
     @patch('jujubackupall.process.ControllerProcessor.backup_apps')
     @patch('jujubackupall.process.connect_model')
     @patch('jujubackupall.process.run_async')
-    def test_backup_models(self, mock_run_async: Mock, mock_connect_model: Mock, mock_backup_apps: Mock):
+    def test_backup_models(
+            self,
+            mock_run_async: Mock,
+            mock_connect_model: Mock,
+            mock_backup_apps: Mock,
+            mock_log: Mock
+    ):
         model_names = ['model1', 'model2']
         mock_run_async.return_value = model_names
 
@@ -197,11 +204,16 @@ class TestControllerProcessor(unittest.TestCase):
         )
 
     @patch('jujubackupall.process.ControllerProcessor.generate_full_backup_path')
+    @patch('jujubackupall.process.ControllerProcessor._log')
     @patch('jujubackupall.process.get_leader')
     @patch('jujubackupall.process.get_charm_backup_instance')
-    def test_backup_apps_all_supported(self, mock_get_backup_instance: Mock,
-                                       mock_get_leader: Mock,
-                                       mock_generate_full_backup_path: Mock):
+    def test_backup_apps_all_supported(
+            self,
+            mock_get_backup_instance: Mock,
+            mock_get_leader: Mock,
+            mock_generate_full_backup_path: Mock,
+            mock_log: Mock
+    ):
         model_name = 'my-model'
         mock_model = Mock()
         apps = [self.create_app_tuple(app_name) for app_name in ['mysql-innodb-cluster', 'percona-cluster', 'my-app']]
