@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, ANY, call
 
 from jujubackupall.backup import (
     MysqlInnodbBackup, PerconaClusterBackup, get_charm_backup_instance,
@@ -123,3 +123,61 @@ class TestJujuClientConfigBackup(unittest.TestCase):
         juju_config_backup_inst.backup()
         mock_ensure_path.assert_called_once()
         mock_shutil.make_archive.assert_called_once()
+
+
+class TestMysqlBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_innodb(self, mock_check_output_unit_action: Mock):
+        mock_unit = Mock()
+        mysql_dumpfile = "mydumpfile"
+        results_dict = {
+            "results": {
+                "mysqldump-file": mysql_dumpfile
+            }
+        }
+        mock_check_output_unit_action.return_value = results_dict
+        mysql_innodb_backup = MysqlInnodbBackup(mock_unit)
+        mysql_innodb_backup.backup()
+        self.assertEqual(mysql_innodb_backup.backup_filepath, Path(mysql_dumpfile))
+        mock_check_output_unit_action.assert_called_once_with(mock_unit, mysql_innodb_backup.backup_action_name)
+
+    @patch("jujubackupall.backup.ensure_path_exists")
+    @patch("jujubackupall.backup.scp_from_unit")
+    @patch("jujubackupall.backup.ssh_run_on_unit")
+    def test_download_backup_innodb(
+            self,
+            mock_ssh_run_on_unit: Mock,
+            mock_scp_from_unit: Mock,
+            mock_ensure_path_exists: Mock,
+    ):
+        save_path = Path("my-path")
+        backup_filepath = Path("some-path")
+        mock_unit = Mock()
+        mysql_innodb_backup = MysqlInnodbBackup(mock_unit)
+        mysql_innodb_backup.backup_filepath = backup_filepath
+        mysql_innodb_backup.download_backup(save_path)
+        mock_ensure_path_exists.assert_called_once_with(path=save_path)
+        mock_scp_from_unit.assert_called_once_with(
+            unit=mock_unit,
+            source=str("/tmp/" / backup_filepath),
+            destination=str(save_path)
+        )
+        self.assertEqual(mock_ssh_run_on_unit.call_count, 2, "assert ssh run on unit called twice")
+
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_percona_backup_setting_pxc(self, mock_check_output_unit_action: Mock):
+        mock_unit = Mock()
+        results_dict = {
+            "results": {
+                "mysqldump-file": "mysql_dumpfile"
+            }
+        }
+        mock_check_output_unit_action.return_value = results_dict
+        percona_backup = PerconaClusterBackup(mock_unit)
+        percona_backup.backup()
+        expected_calls = [
+            call(mock_unit, "set-pxc-strict-mode", mode="MASTER"),
+            call(mock_unit, "mysqldump"),
+            call(mock_unit, "set-pxc-strict-mode", mode="ENFORCING")
+        ]
+        mock_check_output_unit_action.assert_has_calls(expected_calls)
