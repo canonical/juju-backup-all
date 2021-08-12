@@ -32,7 +32,13 @@ from juju.unit import Unit
 
 from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
 from jujubackupall.errors import JujuControllerBackupError
-from jujubackupall.utils import ensure_path_exists, get_datetime_string
+from jujubackupall.utils import (
+    ensure_path_exists,
+    get_datetime_string,
+    check_output_unit_action,
+    scp_from_unit,
+    ssh_run_on_unit,
+)
 
 CharmBackupType = TypeVar("CharmBackupType", bound="CharmBackup")
 logger = getLogger(__name__)
@@ -48,62 +54,51 @@ class BaseBackup(object, metaclass=ABCMeta):
 
 class CharmBackup(BaseBackup, metaclass=ABCMeta):
     charm_name: str = NotImplemented
+    _backup_filepath: Path = None
 
     def __init__(self, unit: Unit):
         self.unit = unit
 
-    @abstractmethod
+    @property
+    def backup_filepath(self):
+        return self._backup_filepath
+
+    @backup_filepath.setter
+    def backup_filepath(self, path: Path):
+        self._backup_filepath = path
+
     def download_backup(self, save_path: Path):
-        pass
+        ensure_path_exists(path=save_path)
+        scp_from_unit(unit=self.unit, source=str(self.backup_filepath), destination=str(save_path))
+        rm_command = "sudo rm -r {}".format(self.backup_filepath)
+        ssh_run_on_unit(unit=self.unit, command=rm_command)
 
 
 class MysqlBackup(CharmBackup, metaclass=ABCMeta):
     backup_action_name = "mysqldump"
-    _mysqldump_file_path = None
-
-    @property
-    def mysqldump_file_path(self):
-        return self._mysqldump_file_path
-
-    @mysqldump_file_path.setter
-    def mysqldump_file_path(self, path):
-        self._mysqldump_file_path = path
 
     def backup(self):
-        backup_action: Action = run_async(self.unit.run_action(self.backup_action_name))
-        run_async(backup_action.wait())
-        self.mysqldump_file_path = Path(backup_action.safe_data.get("results").get("mysqldump-file"))
+        action_output = check_output_unit_action(self.unit, self.backup_action_name)
+        self.backup_filepath = Path(action_output.get("results").get("mysqldump-file"))
 
     def download_backup(self, save_path: Path):
-        filename = self.mysqldump_file_path.name
+        filename = self.backup_filepath.name
         tmp_path = Path("/tmp") / filename
-        cp_chown_command = "sudo cp {} /tmp && sudo chown ubuntu:ubuntu {}".format(self.mysqldump_file_path, tmp_path)
-        run_async(self.unit.ssh(command=cp_chown_command, user="ubuntu"))
-        ensure_path_exists(path=save_path)
-        run_async(self.unit.scp_from(source=str(tmp_path), destination=str(save_path)))
-        rm_command = "sudo rm -r {} {}".format(self.mysqldump_file_path, tmp_path)
-        run_async(self.unit.ssh(command=rm_command, user="ubuntu"))
+        cp_chown_command = "sudo mv {} /tmp && sudo chown ubuntu:ubuntu {}".format(self.backup_filepath, tmp_path)
+        ssh_run_on_unit(unit=self.unit, command=cp_chown_command)
+        self.backup_filepath = tmp_path
+        super().download_backup(save_path)
 
 
 class MysqlInnodbBackup(MysqlBackup):
     charm_name = "mysql-innodb-cluster"
-
-    def backup(self):
-        super().backup()
-
-    def download_backup(self, save_path: Path):
-        super().download_backup(save_path)
 
 
 class PerconaClusterBackup(MysqlBackup):
     charm_name = "percona-cluster"
 
     def _set_pxc_mode(self, mode: str):
-        set_pxc_strict_mode_permissive_action: Action = run_async(
-            self.unit.run_action("set-pxc-strict-mode", mode=mode)
-        )
-        run_async(set_pxc_strict_mode_permissive_action.wait())
-        assert set_pxc_strict_mode_permissive_action.status == "completed"
+        check_output_unit_action(self.unit, "set-pxc-strict-mode", mode=mode)
 
     def backup(self):
         self._set_pxc_mode("MASTER")
@@ -207,7 +202,7 @@ class ClientConfigBackup(BaseBackup, metaclass=ABCMeta):
         shutil.make_archive(
             base_name=str(output_path), format="gztar", root_dir=self.client_config_location.expanduser()
         )
-        logger.info("{} client config backed up".format(self.client_config_name))
+        logger.info("[config] {} client config backed up".format(self.client_config_name))
 
 
 class JujuClientConfigBackup(ClientConfigBackup):

@@ -21,6 +21,7 @@ import logging
 from pathlib import Path
 from typing import List, NamedTuple
 
+from juju.application import Application
 from juju.controller import Controller
 from juju.loop import run as run_async
 from juju.model import Model
@@ -28,7 +29,7 @@ from juju.model import Model
 from jujubackupall.backup import JujuControllerBackup, get_charm_backup_instance, JujuClientConfigBackup
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
-from jujubackupall.errors import JujuControllerBackupError
+from jujubackupall.errors import JujuControllerBackupError, ActionError
 from jujubackupall.utils import (
     connect_controller,
     connect_model,
@@ -75,7 +76,6 @@ class BackupProcessor:
 
     def process_backups(self):
         if self.config.backup_juju_client_config:
-            logger.info("Backing up Juju client config.")
             backup_juju_client_config_inst = JujuClientConfigBackup(Path(self.config.output_dir))
             backup_juju_client_config_inst.backup()
         for controller_name in self.controller_names:
@@ -84,11 +84,8 @@ class BackupProcessor:
                 controller_processor = ControllerProcessor(
                     controller, self.apps_to_backup, Path(self.config.output_dir)
                 )
-                logger.info("[{}] Backing up models.".format(controller.controller_name))
                 controller_processor.backup_models()
-                logger.info("[{}] Models backed up.".format(controller.controller_name))
                 if self.config.backup_controller:
-                    logger.info("[{}] Backing up controller.".format(controller.controller_name))
                     controller_processor.backup_controller()
 
 
@@ -108,18 +105,18 @@ class ControllerProcessor:
         controller_backup_save_path = self.base_output_path / self.controller.controller_name
         controller_backup = JujuControllerBackup(controller=self.controller, save_path=controller_backup_save_path)
         try:
+            self._log("Backing up controller.")
             controller_backup.backup()
+            self._log("Controller backed up to: {}".format(controller_backup_save_path))
         except JujuControllerBackupError as controller_backup_error:
-            warn_msg = "[{}] Juju controller backup failed: {}".format(
-                self.controller.controller_name, controller_backup_error
-            )
-            logger.warning(warn_msg)
+            self._log("Juju controller backup failed: {}".format(controller_backup_error))
 
     def backup_models(self):
         model_names: List[str] = run_async(self.controller.list_models())
-        logger.info("[{}] Models to process: {}".format(self.controller.controller_name, model_names))
+        self._log("Models to process {}".format(model_names))
         for model_name in model_names:
             with connect_model(model_name) as model:
+                self._log("Backing up apps.", model_name=model_name)
                 self.backup_apps(JujuModel(name=model_name, model=model))
 
     def backup_apps(self, model: JujuModel):
@@ -128,14 +125,31 @@ class ControllerProcessor:
             charm_url = app.data.get("charm-url")
             charm_name = parse_charm_name(charm_url)
             if charm_name in self.apps_to_backup:
-                leader_unit = get_leader(app.units)
-                charm_backup_instance = get_charm_backup_instance(charm_name=charm_name, unit=leader_unit)
-                logger.info("Backing up {} app ({} charm)".format(app_name, charm_name))
-                charm_backup_instance.backup()
-                logger.info("App {} backed up".format(app_name))
-                logger.info("Downloading backups")
-                charm_backup_instance.download_backup(self.generate_full_backup_path(model_name, app_name))
-                logger.info("Backups downloaded to {}".format(self.generate_full_backup_path(model_name, app_name)))
+                self.backup_app(app=app, app_name=app_name, charm_name=charm_name, model_name=model_name)
+
+    def backup_app(self, app: Application, app_name: str, charm_name: str, model_name: str):
+        leader_unit = get_leader(app.units)
+        charm_backup_instance = get_charm_backup_instance(charm_name=charm_name, unit=leader_unit)
+        try:
+            self._log("Backing up app.", app_name=app_name, model_name=model_name)
+            charm_backup_instance.backup()
+            self._log("Downloading backup.", app_name=app_name, model_name=model_name)
+            full_backup_path = self.generate_full_backup_path(model_name, app_name)
+            charm_backup_instance.download_backup(full_backup_path)
+            self._log("Backups downloaded to {}".format(full_backup_path), app_name=app_name, model_name=model_name)
+        except ActionError as action_error:
+            self._log(
+                "Backup failed: {}.\nFailed action results: {}".format(action_error, action_error.results()),
+                app_name=app_name,
+                model_name=model_name,
+                level=logging.ERROR,
+            )
 
     def generate_full_backup_path(self, model_name: str, app_name: str) -> Path:
         return self.base_output_path / self.controller.controller_name / model_name / app_name
+
+    def _log(self, msg, app_name=None, model_name=None, level=logging.INFO):
+        formatted_msg = "[{}] {}".format(
+            " ".join([x for x in (self.controller.controller_name, model_name, app_name) if x]), msg
+        )
+        logger.log(level=level, msg=formatted_msg)
