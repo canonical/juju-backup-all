@@ -13,6 +13,52 @@ applications that can be backed up. It then saves these backups
 
 ## Usage
 
+This tool primarily auto-discovers controllers/charms that need backing up. To backup the current controller, simply run:
+
+```bash
+juju-backup-all
+```
+
+This will backup all apps of all models (in the current controller) of supported charms and output them into 
+`juju-backups/` directory. It will also backup the local juju client config.
+
+For a more complex command, here's an example that specifies an output directory, excludes certain charms, excludes the
+juju client config backup, and runs backups on all controllers.
+
+```bash
+juju-backup-all -o my/backups/ \
+  -e postgresql \
+  -e etcd \
+  --all-controllers 
+```
+
+The following command will give all the possible arguments that can be passed to the tool:
+
+```bash
+juju-backup-all -h
+```
+
+The backup directory structure will look like the following:
+
+```bash
+juju-backups/
+├── local_configs/
+│   └── juju.tar.gz
+├── controller1/
+│   ├── model1/
+│   │   ├── mysql-innodb-cluster/
+│   │   │   └── mysqldump.tar.gz
+│   │   └── percona-cluster-app/
+│   │       └── mysqldump.tar.gz
+│   └── model2/
+│       └── percona-cluster-app/
+│           └── mysqldump.tar.gz
+└── controller2/
+    └── model1/
+        └── etcd-app/
+            └── backups.tar.gz
+```
+
 ## Development and Testing
 
 To set up development environment:
@@ -21,6 +67,8 @@ To set up development environment:
 make venv
 . venv-all/bin/activate
 ```
+
+### Functional tests
 
 To run functional tests:
 
@@ -32,6 +80,33 @@ or
 
 ```bash
 tox -e functional
+```
+
+Several environment variables are available for setting to help expedite testing.
+These include:
+
+- `PYTEST_KEEP_MODELS`: keeps the models after running functional tests. This helps in debugging and reuse of models
+for quicker testing
+- `PYTEST_MYSQL_MODEL`, `PYTEST_PERCONA_MODEL`: setting these to a current model will have the functional tests use
+that model instead of deploying another one. 
+- `JUJU_DATA`: Specify where your juju client config directory is located. If not set, it will default to
+`~/.local/share/juju`. This is needed in functional testing as the tool runs some subprocess `juju` commands
+(like `juju create-backup`) and without this set, the environment for functional tests has no info on controllers.
+- `PYTEST_SELECT_TESTS`: use to select tests based on their name (via
+[pytest `-k` expression docs](https://docs.pytest.org/en/latest/example/markers.html#using-k-expr-to-select-tests-based-on-their-name))
+
+### Unit tests
+
+To run unit tests:
+
+```bash
+make unit
+```
+
+To run unit tests and also generate html converage reports:
+
+```bash
+make unit-html-report
 ```
 
 ## Building and Installing Snap Locally
