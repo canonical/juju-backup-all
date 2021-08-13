@@ -1,0 +1,30 @@
+name: juju-backup-all
+base: core18
+adopt-info: juju-backup-all
+summary: Tool for backing up charms, local configs, and Juju controllers.
+description: |
+  Juju-backup-all allows operators to perform backups across all controllers
+  and models. It provides autodiscovery, backing up all applications of supported
+  charms. The tool also includes options to exclude charms, select which
+  controllers to backup, and backup local configs.
+
+  Supported charms: mysql-innodb-cluster, percona-cluster, etcd
+  Supported config backups: Juju
+grade: devel
+confinement: classic
+
+apps:
+  juju-backup-all:
+    command: bin/juju-backup-all
+
+parts:
+  juju-backup-all:
+    plugin: python
+    requirements:
+      - requirements.txt
+    source: .
+    source-type: git
+    override-build: |
+      snapcraftctl build
+      echo "Version: $(python3 setup.py --version)"
+      snapcraftctl set-version "$(python3 setup.py --version)"
