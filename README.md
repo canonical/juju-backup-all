@@ -33,3 +33,23 @@ or
 ```bash
 tox -e functional
 ```
+
+## Building and Installing Snap Locally
+
+To build the snap locally, simply run:
+
+```bash
+make snap
+```
+
+You can then install the locally built snap with:
+
+```bash
+sudo snap install --classic --dangerous ./juju-backup-all_${VERSION}.snap
+```
+
+To clean up the snapcraft build environment, run the following:
+
+```bash
+make snap-clean
+```
