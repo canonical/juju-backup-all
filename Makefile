@@ -46,3 +46,9 @@ clean:
 
 black-check:
 		@tox -e blackcheck
+
+snap:
+		@echo "Building snap using lxd"
+		@snapcraft --use-lxd
+
+.PHONY: snap
