@@ -7,3 +7,7 @@ juju-backups/
 htmlcov/
 .coverage
 __pycache__
+.eggs/
+.pytest_cache/
+flake/
+*.snap

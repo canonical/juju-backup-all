@@ -46,3 +46,13 @@ clean:
 
 black-check:
 		@tox -e blackcheck
+
+snap:
+		@echo "Building snap using lxd"
+		@snapcraft --use-lxd
+
+snap-clean:
+		@echo "Cleaning up snap"
+		@snapcraft clean --use-lxd
+
+.PHONY: snap
