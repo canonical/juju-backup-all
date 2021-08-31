@@ -13,6 +13,7 @@ import os
 import uuid
 
 import pytest
+from juju.application import Application
 from juju.controller import Controller
 from juju.model import Model
 from juju.errors import JujuConnectionError
@@ -61,6 +62,16 @@ async def percona_cluster_model(controller):
         await _cleanup_model(controller, juju_model.model_name)
 
 
+@pytest.fixture(scope="session", autouse=True)
+async def etcd_model(controller):
+    """Return the etcd model for the test."""
+    juju_model = await _get_or_create_model(controller, app_name='etcd', env_var='PYTEST_ETCD_MODEL')
+    yield juju_model
+    await juju_model.model.disconnect()
+    if not os.getenv("PYTEST_KEEP_MODELS"):
+        await _cleanup_model(controller, juju_model.model_name)
+
+
 @pytest.fixture(scope='module')
 async def mysql_innodb_app(mysql_innodb_model):
     model = mysql_innodb_model.model
@@ -93,6 +104,34 @@ async def percona_cluster_app(percona_cluster_model: JujuModel):
     )
     await model.block_until(lambda: percona_cluster_app.status == 'active')
     return percona_cluster_app
+
+
+@pytest.fixture(scope='module')
+async def etcd_app(etcd_model):
+    model = etcd_model.model
+    etcd_app: Application = model.applications.get('etcd')
+    easyrsa_app: Application = model.applications.get('easyrsa')
+    if not etcd_app:
+        etcd_app = await model.deploy(
+            'cs:etcd',
+            application_name='etcd',
+            series='focal',
+            channel='stable',
+            num_units=1
+        )
+    if not easyrsa_app:
+        await model.deploy(
+            'cs:~containers/easyrsa',
+            application_name='easyrsa',
+            series='focal',
+            channel='stable',
+            num_units=1
+        )
+    await etcd_app.add_relation(
+        'certificates', 'easyrsa:client'
+    )
+    await model.block_until(lambda: etcd_app.status == 'active')
+    return etcd_app
 
 
 async def _get_or_create_model(controller, env_var, app_name):

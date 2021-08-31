@@ -66,3 +66,16 @@ async def test_juju_client_config_backup(tmp_path: Path):
     expected_output_dir = tmp_path / 'local_configs'
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + '/juju-*.gz')
+
+
+async def test_etcd_backup(etcd_model: JujuModel, etcd_app: Application, tmp_path: Path, controller: Controller):
+    model_name, model = etcd_model.model_name, etcd_model.model
+    controller_name = controller.controller_name
+    etcd_app_name = 'etcd'
+    output = subprocess.check_output(
+        'juju-backup-all -o {} -e percona-cluster -e mysql-innodb-cluster -e postgresql -x -j'.format(tmp_path),
+        shell=True
+    )
+    expected_output_dir = (tmp_path / controller_name / model_name / etcd_app_name)
+    assert expected_output_dir.exists()
+    assert glob.glob(str(expected_output_dir) + '/etcd-snapshot*.gz')
