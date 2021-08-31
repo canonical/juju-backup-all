@@ -181,3 +181,22 @@ class TestMysqlBackup(unittest.TestCase):
             call(mock_unit, "set-pxc-strict-mode", mode="ENFORCING")
         ]
         mock_check_output_unit_action.assert_has_calls(expected_calls)
+
+
+class TestEtcdBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_etcd_backup(self, mock_check_output_unit_action: Mock):
+        mock_unit = Mock()
+        expected_path_string = "my_path"
+        results_dict = {
+            "results": {
+                "snapshot": {
+                    "path": expected_path_string
+                }
+            }
+        }
+        mock_check_output_unit_action.return_value = results_dict
+        etcd_backup_inst = EtcdBackup(mock_unit)
+        etcd_backup_inst.backup()
+        mock_check_output_unit_action.assert_called_once()
+        self.assertEqual(etcd_backup_inst.backup_filepath, Path(expected_path_string))
