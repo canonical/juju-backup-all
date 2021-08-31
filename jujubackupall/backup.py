@@ -108,12 +108,11 @@ class PerconaClusterBackup(MysqlBackup):
 
 class EtcdBackup(CharmBackup):
     charm_name = "etcd"
+    backup_action_name = "snapshot"
 
     def backup(self):
-        pass
-
-    def download_backup(self, save_path: Path):
-        pass
+        action_output = check_output_unit_action(self.unit, self.backup_action_name)
+        self.backup_filepath = Path(action_output.get("results").get("snapshot").get("path"))
 
 
 class PostgresqlBackup(CharmBackup):
