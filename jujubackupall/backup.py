@@ -25,9 +25,7 @@ from logging import getLogger
 from pathlib import Path
 from typing import TypeVar
 
-from juju.action import Action
 from juju.controller import Controller
-from juju.loop import run as run_async
 from juju.unit import Unit
 
 from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
