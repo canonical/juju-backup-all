@@ -30,6 +30,7 @@ from juju.loop import run as run_async
 from juju.model import Model
 from juju.unit import Unit
 
+from jujubackupall.constants import MAX_FRAME_SIZE
 from jujubackupall.errors import ActionError
 
 
@@ -50,7 +51,7 @@ def connect_controller(controller_name: str) -> Controller:
 @contextmanager
 def connect_model(model_name: str) -> Model:
     """Handle connecting to and disconnecting from a Juju Model."""
-    model = Model()
+    model = Model(max_frame_size=MAX_FRAME_SIZE)
     run_async(model.connect(model_name))
     try:
         yield model
