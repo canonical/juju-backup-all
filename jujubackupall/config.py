@@ -45,6 +45,10 @@ class Config:
         return self.args.get("excluded_charms")
 
     @property
+    def log_level(self) -> str:
+        return self.args.get("log_level")
+
+    @property
     def output_dir(self) -> str:
         return self.args.get("output_dir")
 

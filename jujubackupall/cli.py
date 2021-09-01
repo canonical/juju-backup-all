@@ -25,7 +25,6 @@ from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 from jujubackupall.process import BackupProcessor
 
 FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
-logging.basicConfig(format=FORMAT, level=logging.INFO)
 
 
 class Cli:
@@ -34,6 +33,7 @@ class Cli:
         self.config = Config(self.args)
 
     def run(self):
+        self._configure_logging()
         backup_processor = BackupProcessor(self.config)
         backup_processor.process_backups()
 
@@ -48,8 +48,16 @@ class Cli:
             excluded_charms=args.excluded_charms,
             controllers=args.controllers,
             output_dir=args.output_dir,
+            log_level=args.log_level,
         )
         return args_dict
+
+    def _configure_logging(self):
+        logging.basicConfig(format=FORMAT, level=self.config.log_level)
+        logging.getLogger("websockets").setLevel(logging.ERROR)
+        logging.getLogger("juju").setLevel(logging.ERROR)
+        logging.getLogger("connector").setLevel(logging.CRITICAL)
+        logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 
 
 def make_cli_parser():
@@ -65,6 +73,14 @@ def make_cli_parser():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-C", "--controller", dest="controllers", action="append")
     group.add_argument("-A", "--all-controllers", action="store_true")
+    group.add_argument(
+        "-l",
+        "--log",
+        dest="log_level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="WARNING",
+        type=str.upper,
+    )
     return parser
 
 

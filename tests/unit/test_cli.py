@@ -14,6 +14,7 @@ backup_juju_client_config = True
 controllers = ['controller1', 'controller2']
 excluded_charms = ['mysql']
 output_dir = 'my_output_dir'
+log_level = "INFO"
 
 
 class TestCli(unittest.TestCase):
@@ -26,7 +27,8 @@ class TestCli(unittest.TestCase):
             backup_juju_client_config=backup_juju_client_config,
             controllers=controllers,
             excluded_charms=excluded_charms,
-            output_dir=output_dir
+            output_dir=output_dir,
+            log_level=log_level,
         )
         return args_dict
 
@@ -41,12 +43,13 @@ class TestCli(unittest.TestCase):
         mock_config.assert_called_once_with(self.args())
         self.assertIsInstance(cli, Cli)
 
+    @patch('jujubackupall.cli.logging')
     @patch('jujubackupall.cli.Config')
     @patch('jujubackupall.cli.make_cli_parser')
     @patch('jujubackupall.cli.BackupProcessor')
-    def test_cli_run(self, mock_backup_processor_class: Mock,
-                     mock_make_parser: Mock,
-                     mock_config_class: Mock):
+    def test_cli_run(
+            self, mock_backup_processor_class: Mock, mock_make_parser: Mock, mock_config_class: Mock, mock_logging: Mock
+    ):
         mock_config_inst = Mock()
         mock_backup_processor_inst = Mock()
         mock_config_class.return_value = mock_config_inst
