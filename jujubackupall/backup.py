@@ -17,13 +17,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides the backup classes for the various charms."""
+import dataclasses
+import json
 import os
 import shutil
 import subprocess
 from abc import ABCMeta, abstractmethod
+from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, List, Dict
 
 from juju.controller import Controller
 from juju.unit import Unit
@@ -65,11 +68,12 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
     def backup_filepath(self, path: Path):
         self._backup_filepath = path
 
-    def download_backup(self, save_path: Path):
+    def download_backup(self, save_path: Path) -> Path:
         ensure_path_exists(path=save_path)
         scp_from_unit(unit=self.unit, source=str(self.backup_filepath), destination=str(save_path))
         rm_command = "sudo rm -r {}".format(self.backup_filepath)
         ssh_run_on_unit(unit=self.unit, command=rm_command)
+        return (save_path / self.backup_filepath.name).absolute()
 
 
 class MysqlBackup(CharmBackup, metaclass=ABCMeta):
@@ -79,13 +83,13 @@ class MysqlBackup(CharmBackup, metaclass=ABCMeta):
         action_output = check_output_unit_action(self.unit, self.backup_action_name)
         self.backup_filepath = Path(action_output.get("results").get("mysqldump-file"))
 
-    def download_backup(self, save_path: Path):
+    def download_backup(self, save_path: Path) -> Path:
         filename = self.backup_filepath.name
         tmp_path = Path("/tmp") / filename
         cp_chown_command = "sudo mv {} /tmp && sudo chown ubuntu:ubuntu {}".format(self.backup_filepath, tmp_path)
         ssh_run_on_unit(unit=self.unit, command=cp_chown_command)
         self.backup_filepath = tmp_path
-        super().download_backup(save_path)
+        return super().download_backup(save_path)
 
 
 class MysqlInnodbBackup(MysqlBackup):
@@ -139,7 +143,7 @@ class JujuControllerBackup(BaseBackup):
         self.controller = controller
         self.save_path = save_path
 
-    def backup(self):
+    def backup(self) -> Path:
         """Run `juju create-backup` against Juju controller.
 
         As juju controller backups tend to be flaky, this method will retry the backups.
@@ -182,6 +186,7 @@ class JujuControllerBackup(BaseBackup):
             )
             logger.error(error_msg)
             raise JujuControllerBackupError(last_error)
+        return save_file_path.absolute()
 
 
 class ClientConfigBackup(BaseBackup, metaclass=ABCMeta):
@@ -191,15 +196,16 @@ class ClientConfigBackup(BaseBackup, metaclass=ABCMeta):
     def __init__(self, base_output_dir: Path):
         self.base_output_dir = base_output_dir
 
-    def backup(self):
+    def backup(self) -> Path:
         output_path = (
             self.base_output_dir / "local_configs" / "{}-{}".format(self.client_config_name, get_datetime_string())
         )
         ensure_path_exists(output_path.parent)
-        shutil.make_archive(
+        archive_path = shutil.make_archive(
             base_name=str(output_path), format="gztar", root_dir=self.client_config_location.expanduser()
         )
-        logger.info("[config] {} client config backed up".format(self.client_config_name))
+        logger.info("[config] {} client config backed up.".format(self.client_config_name))
+        return Path(archive_path).absolute()
 
 
 class JujuClientConfigBackup(ClientConfigBackup):
@@ -210,6 +216,63 @@ class JujuClientConfigBackup(ClientConfigBackup):
         super().__init__(base_output_dir)
         if os.environ.get("JUJU_DATA"):
             self.client_config_location = Path(os.environ.get("JUJU_DATA"))
+
+
+@dataclass
+class AppBackupEntry:
+    controller: str
+    model: str
+    charm: str
+    app: str
+    download_path: str
+
+
+@dataclass
+class ConfigBackupEntry:
+    config: str
+    download_path: str
+
+
+@dataclass
+class ControllerBackupEntry:
+    controller: str
+    download_path: str
+
+
+class BackupTracker:
+    """"""
+    def __init__(self):
+        self.controller_backups: List[ControllerBackupEntry] = list()
+        self.config_backups: List[ConfigBackupEntry] = list()
+        self.app_backups: List[AppBackupEntry] = list()
+        self.errors: List[Dict] = list()
+
+    def add_app_backup(self, controller: str, model: str, charm: str, app: str, download_path: str):
+        app_backup = AppBackupEntry(
+            controller=controller, model=model, charm=charm, app=app, download_path=download_path
+        )
+        self.app_backups.append(app_backup)
+
+    def add_config_backup(self, config: str, download_path: str):
+        config_backup_entry = ConfigBackupEntry(config=config, download_path=download_path)
+        self.config_backups.append(config_backup_entry)
+
+    def add_controller_backup(self, controller: str, download_path: str):
+        controller_backup_entry = ControllerBackupEntry(controller=controller, download_path=download_path)
+        self.controller_backups.append(controller_backup_entry)
+
+    def add_error(self, **kwargs):
+        self.errors.append(kwargs)
+
+    def print_report(self):
+        report = dict(
+            controller_backups=[dataclasses.asdict(x) for x in self.controller_backups],
+            config_backups=[dataclasses.asdict(x) for x in self.config_backups],
+            app_backups=[dataclasses.asdict(x) for x in self.app_backups],
+        )
+        if self.errors:
+            report["errors"] = self.errors
+        print(json.dumps(report, indent=2))
 
 
 def get_charm_backup_instance(charm_name: str, unit: Unit) -> CharmBackupType:

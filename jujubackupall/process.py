@@ -26,7 +26,7 @@ from juju.controller import Controller
 from juju.loop import run as run_async
 from juju.model import Model
 
-from jujubackupall.backup import JujuControllerBackup, get_charm_backup_instance, JujuClientConfigBackup
+from jujubackupall.backup import JujuControllerBackup, get_charm_backup_instance, JujuClientConfigBackup, BackupTracker
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 from jujubackupall.errors import JujuControllerBackupError, ActionError
@@ -39,6 +39,7 @@ from jujubackupall.utils import (
 )
 
 logger = logging.getLogger(__name__)
+tracker = BackupTracker()
 
 
 class JujuModel(NamedTuple):
@@ -76,8 +77,10 @@ class BackupProcessor:
 
     def process_backups(self):
         if self.config.backup_juju_client_config:
-            backup_juju_client_config_inst = JujuClientConfigBackup(Path(self.config.output_dir))
-            backup_juju_client_config_inst.backup()
+            config_backup_dir_path = Path(self.config.output_dir)
+            backup_juju_client_config_inst = JujuClientConfigBackup(config_backup_dir_path)
+            resulting_backup_path = backup_juju_client_config_inst.backup()
+            tracker.add_config_backup(backup_juju_client_config_inst.client_config_name, str(resulting_backup_path))
         for controller_name in self.controller_names:
             with connect_controller(controller_name) as controller:
                 logger.info("[{}] Processing backups.".format(controller.controller_name))
@@ -87,6 +90,7 @@ class BackupProcessor:
                 controller_processor.backup_models()
                 if self.config.backup_controller:
                     controller_processor.backup_controller()
+        tracker.print_report()
 
 
 class ControllerProcessor:
@@ -106,10 +110,15 @@ class ControllerProcessor:
         controller_backup = JujuControllerBackup(controller=self.controller, save_path=controller_backup_save_path)
         try:
             self._log("Backing up controller.")
-            controller_backup.backup()
+            resulting_backup_path = controller_backup.backup()
+            tracker.add_controller_backup(self.controller.controller_name, str(resulting_backup_path))
             self._log("Controller backed up to: {}".format(controller_backup_save_path))
         except JujuControllerBackupError as controller_backup_error:
             self._log("Juju controller backup failed: {}".format(controller_backup_error))
+            tracker.add_error(
+                controller=self.controller.controller_name,
+                error_reason=str(controller_backup_error),
+            )
 
     def backup_models(self):
         model_names: List[str] = run_async(self.controller.list_models())
@@ -135,14 +144,30 @@ class ControllerProcessor:
             charm_backup_instance.backup()
             self._log("Downloading backup.", app_name=app_name, model_name=model_name)
             full_backup_path = self.generate_full_backup_path(model_name, app_name)
-            charm_backup_instance.download_backup(full_backup_path)
-            self._log("Backups downloaded to {}".format(full_backup_path), app_name=app_name, model_name=model_name)
+            resulting_backup_path = charm_backup_instance.download_backup(full_backup_path)
+            tracker.add_app_backup(
+                controller=self.controller.controller_name,
+                model=model_name,
+                app=app_name,
+                charm=charm_name,
+                download_path=str(resulting_backup_path),
+            )
+            self._log(
+                "Backups downloaded to {}".format(resulting_backup_path), app_name=app_name, model_name=model_name
+            )
         except ActionError as action_error:
             self._log(
                 "Backup failed: {}.\nFailed action results: {}".format(action_error, action_error.results()),
                 app_name=app_name,
                 model_name=model_name,
                 level=logging.ERROR,
+            )
+            tracker.add_error(
+                controller=self.controller.controller_name,
+                model=model_name,
+                app=app_name,
+                charm=charm_name,
+                error_reason=str(action_error),
             )
 
     def generate_full_backup_path(self, model_name: str, app_name: str) -> Path:
