@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 """ Unit tests for backup.py """
+import io
+import json
 from pathlib import Path
 import subprocess
 import unittest
@@ -7,7 +9,7 @@ from unittest.mock import Mock, patch, ANY, call
 
 from jujubackupall.backup import (
     MysqlInnodbBackup, PerconaClusterBackup, get_charm_backup_instance,
-    PostgresqlBackup, EtcdBackup, SwiftBackup, JujuControllerBackup, JujuClientConfigBackup
+    PostgresqlBackup, EtcdBackup, SwiftBackup, JujuControllerBackup, JujuClientConfigBackup, BackupTracker
 )
 from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
 from jujubackupall.errors import JujuControllerBackupError
@@ -119,6 +121,7 @@ class TestJujuClientConfigBackup(unittest.TestCase):
     ):
         output_path = Path('my/path')
         mock_os.environ.get.return_value = None
+        mock_shutil.make_archive.return_value = output_path / "archive.tar.gz"
         juju_config_backup_inst = JujuClientConfigBackup(output_path)
         juju_config_backup_inst.backup()
         mock_ensure_path.assert_called_once()
@@ -200,3 +203,122 @@ class TestEtcdBackup(unittest.TestCase):
         etcd_backup_inst.backup()
         mock_check_output_unit_action.assert_called_once()
         self.assertEqual(etcd_backup_inst.backup_filepath, Path(expected_path_string))
+
+
+class TestBackupTracker(unittest.TestCase):
+    app_backups = [
+        dict(controller="controller1", model="model1", charm="charm1", app="app1", download_path="mypath1"),
+        dict(controller="controller2", model="model2", charm="charm2", app="app2", download_path="mypath2"),
+    ]
+
+    config_backups = [
+        dict(config="config1", download_path="mypath3"),
+        dict(config="config2", download_path="mypath4"),
+    ]
+
+    controller_backups = [
+        dict(controller="controller1", download_path="mypath5"),
+        dict(controller="controller2", download_path="mypath6"),
+    ]
+
+    def setUp(self) -> None:
+        self.tracker = BackupTracker()
+
+    @patch("sys.stdout", new_callable=io.StringIO)
+    def assert_stdout(self, expected_output, mock_stdout):
+        self.tracker.print_report()
+        self.assertEqual(expected_output, mock_stdout.getvalue().strip())
+
+    @staticmethod
+    def generate_expected_output(apps, configs, controllers):
+        d = dict(
+            controller_backups=controllers,
+            config_backups=configs,
+            app_backups=apps
+        )
+        return json.dumps(d, indent=2)
+
+    def add_app_backups_to_tracker(self, app_backup_dicts):
+        for app_backup_dict in app_backup_dicts:
+            self.tracker.add_app_backup(
+                controller=app_backup_dict.get("controller"),
+                model=app_backup_dict.get("model"),
+                charm=app_backup_dict.get("charm"),
+                app=app_backup_dict.get("app"),
+                download_path=app_backup_dict.get("download_path"),
+            )
+
+    def add_controller_backups_to_tracker(self, controller_backup_dicts):
+        for controller_backup_dict in controller_backup_dicts:
+            self.tracker.add_controller_backup(
+                controller=controller_backup_dict.get("controller"),
+                download_path=controller_backup_dict.get("download_path"),
+            )
+
+    def add_config_backups_to_tracker(self, config_backup_dicts):
+        for config_backup_dict in config_backup_dicts:
+            self.tracker.add_config_backup(
+                config=config_backup_dict.get("config"),
+                download_path=config_backup_dict.get("download_path"),
+            )
+
+    def test_report_multi_apps(self):
+        expected_output = self.generate_expected_output(
+            apps=self.app_backups,
+            controllers=[],
+            configs=[]
+        )
+        self.add_app_backups_to_tracker(self.app_backups)
+        self.assert_stdout(expected_output)
+
+    def test_report_one_app(self):
+        expected_output = self.generate_expected_output(
+            apps=self.app_backups[0:1],
+            controllers=[],
+            configs=[]
+        )
+        self.add_app_backups_to_tracker(self.app_backups[0:1])
+        self.assert_stdout(expected_output)
+
+    def test_report_multi_controllers(self):
+        expected_output = self.generate_expected_output(
+            apps=[],
+            controllers=self.controller_backups,
+            configs=[]
+        )
+        self.add_controller_backups_to_tracker(self.controller_backups)
+        self.assert_stdout(expected_output)
+
+    def test_multi_configs(self):
+        expected_output = self.generate_expected_output(
+            apps=[],
+            controllers=[],
+            configs=self.config_backups
+        )
+        self.add_config_backups_to_tracker(self.config_backups)
+        self.assert_stdout(expected_output)
+
+    def test_all_no_errors(self):
+        expected_output = self.generate_expected_output(
+            apps=self.app_backups,
+            controllers=self.controller_backups,
+            configs=self.config_backups
+        )
+        self.add_app_backups_to_tracker(self.app_backups)
+        self.add_config_backups_to_tracker(self.config_backups)
+        self.add_controller_backups_to_tracker(self.controller_backups)
+        self.assert_stdout(expected_output)
+
+    def test_all_errors(self):
+        error_list = [
+            dict(controller="controller1", error_reason="some reason"),
+            dict(config="config2", error_reason="some other reason"),
+            dict(controller="app", app="some-app", error_reason="some other reason"),
+        ]
+        expected_output = json.dumps(
+            dict(controller_backups=[], config_backups=[], app_backups=[], errors=error_list),
+            indent=2
+        )
+        for error in error_list:
+            self.tracker.add_error(**error)
+        self.assert_stdout(expected_output)
