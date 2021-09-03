@@ -43,15 +43,16 @@ class TestConnectController(unittest.TestCase):
 
 
 class TestConnectModel(unittest.TestCase):
-    @patch('jujubackupall.utils.Model', return_value=Mock())
     @patch('jujubackupall.utils.run_async')
-    def test_connect_model(self, mock_run_async: Mock, mock_model: Mock):
+    def test_connect_model(self, mock_run_async: Mock):
         model_name = 'my-model'
-        mock_model_instance = mock_model.return_value
-        with connect_model(model_name) as model:
+        mock_model = Mock()
+        mock_controller = Mock()
+        mock_run_async.return_value = mock_model
+        with connect_model(mock_controller, model_name) as model:
             pass
-        mock_model_instance.connect.assert_called_with(model_name)
-        mock_model_instance.disconnect.assert_called_once()
+        mock_controller.get_model.assert_called_with(model_name)
+        mock_model.disconnect.assert_called_once()
 
 
 class TestGetAllControllers(unittest.TestCase):
