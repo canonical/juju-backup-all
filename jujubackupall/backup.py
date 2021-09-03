@@ -240,7 +240,8 @@ class ControllerBackupEntry:
 
 
 class BackupTracker:
-    """"""
+    """Class to keep track and output successful and failed backups."""
+
     def __init__(self):
         self.controller_backups: List[ControllerBackupEntry] = list()
         self.config_backups: List[ConfigBackupEntry] = list()
@@ -265,6 +266,46 @@ class BackupTracker:
         self.errors.append(kwargs)
 
     def print_report(self):
+        """Print json representation of backups.
+
+        The output will look as follows:
+        {
+          "controller_backups": [
+            {
+              "controller": "my-controller",
+              "download_path": "/home/user/controller1/juju-controller-backup.tar.gz"
+            }
+          ],
+          "config_backups": [
+            {
+              "config": "juju",
+              "download_path": "/home/user/local_configs/juju.tar.gz"
+            }
+          ],
+          "app_backups": [
+            {
+              "controller": "my-controller",
+              "model": "my-model1",
+              "charm": "etcd",
+              "app": "etcd",
+              "download_path": "/home/user/my-controller/my-model1/etcd/etcd.tar.gz"
+            },
+            {
+              "controller": "my-controller",
+              "model": "my-model2",
+              "charm": "mysql-innodb-cluster",
+              "app": "mysql",
+              "download_path": "/home/user/my-controller/my-model1/mysql/mysqldump-all-databases.gz"
+            }
+          ]
+          "errors":  [
+            {
+              "controller": "my-other-controller",
+              "error-reason": "reason for error"
+            }
+          ]
+        }
+        """
         report = dict(
             controller_backups=[dataclasses.asdict(x) for x in self.controller_backups],
             config_backups=[dataclasses.asdict(x) for x in self.config_backups],
