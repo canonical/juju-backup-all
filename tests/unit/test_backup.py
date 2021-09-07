@@ -8,8 +8,15 @@ import unittest
 from unittest.mock import Mock, patch, ANY, call
 
 from jujubackupall.backup import (
-    MysqlInnodbBackup, PerconaClusterBackup, get_charm_backup_instance,
-    PostgresqlBackup, EtcdBackup, SwiftBackup, JujuControllerBackup, JujuClientConfigBackup, BackupTracker
+    MysqlInnodbBackup,
+    PerconaClusterBackup,
+    get_charm_backup_instance,
+    PostgresqlBackup,
+    EtcdBackup,
+    SwiftBackup,
+    JujuControllerBackup,
+    JujuClientConfigBackup,
+    BackupTracker,
 )
 from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
 from jujubackupall.errors import JujuControllerBackupError
@@ -17,11 +24,13 @@ from jujubackupall.errors import JujuControllerBackupError
 
 class TestGetCharmBackupInstance(unittest.TestCase):
     def test_get_backup_instance(self):
-        test_cases = [('mysql-innodb-cluster', MysqlInnodbBackup),
-                      ('percona-cluster', PerconaClusterBackup),
-                      ('etcd', EtcdBackup),
-                      ('postgresql', PostgresqlBackup),
-                      ('swift-proxy', SwiftBackup)]
+        test_cases = [
+            ("mysql-innodb-cluster", MysqlInnodbBackup),
+            ("percona-cluster", PerconaClusterBackup),
+            ("etcd", EtcdBackup),
+            ("postgresql", PostgresqlBackup),
+            ("swift-proxy", SwiftBackup),
+        ]
         for charm_name, expected_backup_class in test_cases:
             with self.subTest(charm_name=charm_name, expected_backup_class=expected_backup_class):
                 backup_instance = get_charm_backup_instance(charm_name, Mock())
@@ -31,20 +40,14 @@ class TestGetCharmBackupInstance(unittest.TestCase):
 class TestJujuControllerBackup(unittest.TestCase):
     def setUp(self):
         self.mock_controller = Mock()
-        self.mock_save_path = Path('mypath')
-        self.controller_backup = JujuControllerBackup(
-            controller=self.mock_controller,
-            save_path=self.mock_save_path
-        )
+        self.mock_save_path = Path("mypath")
+        self.controller_backup = JujuControllerBackup(controller=self.mock_controller, save_path=self.mock_save_path)
 
     @patch("jujubackupall.backup.subprocess")
     @patch("jujubackupall.backup.get_datetime_string")
     @patch("jujubackupall.backup.ensure_path_exists")
     def test_backup_controller_first_success(
-            self,
-            mock_path_exists: Mock,
-            mock_get_datetime_string: Mock,
-            mock_subprocess: Mock
+        self, mock_path_exists: Mock, mock_get_datetime_string: Mock, mock_subprocess: Mock
     ):
         self.controller_backup.backup()
         mock_subprocess.check_output.assert_called_once()
@@ -53,12 +56,9 @@ class TestJujuControllerBackup(unittest.TestCase):
     @patch("jujubackupall.backup.get_datetime_string")
     @patch("jujubackupall.backup.ensure_path_exists")
     def test_backup_controller_one_fail_then_success(
-            self,
-            mock_path_exists: Mock,
-            mock_get_datetime_string: Mock,
-            mock_subprocess_check_output: Mock
+        self, mock_path_exists: Mock, mock_get_datetime_string: Mock, mock_subprocess_check_output: Mock
     ):
-        called_proc_error = subprocess.CalledProcessError(returncode=2, cmd=["bad"], stderr='something')
+        called_proc_error = subprocess.CalledProcessError(returncode=2, cmd=["bad"], stderr="something")
         mock_subprocess_check_output.side_effect = [called_proc_error, "", 10]
         self.controller_backup.backup()
         self.assertEqual(mock_subprocess_check_output.call_count, 2, "assert check_output was called twice.")
@@ -67,12 +67,9 @@ class TestJujuControllerBackup(unittest.TestCase):
     @patch("jujubackupall.backup.get_datetime_string")
     @patch("jujubackupall.backup.ensure_path_exists")
     def test_backup_controller_one_fail_then_success(
-            self,
-            mock_path_exists: Mock,
-            mock_get_datetime_string: Mock,
-            mock_subprocess_check_output: Mock
+        self, mock_path_exists: Mock, mock_get_datetime_string: Mock, mock_subprocess_check_output: Mock
     ):
-        called_proc_error = subprocess.CalledProcessError(returncode=2, cmd=["bad"], stderr='something')
+        called_proc_error = subprocess.CalledProcessError(returncode=2, cmd=["bad"], stderr="something")
         mock_subprocess_check_output.side_effect = [called_proc_error, None]
         self.controller_backup.backup()
         self.assertEqual(mock_subprocess_check_output.call_count, 2, "assert check_output was called twice.")
@@ -81,25 +78,22 @@ class TestJujuControllerBackup(unittest.TestCase):
     @patch("jujubackupall.backup.get_datetime_string")
     @patch("jujubackupall.backup.ensure_path_exists")
     def test_backup_controller_all_fail_raise_exception(
-            self,
-            mock_path_exists: Mock,
-            mock_get_datetime_string: Mock,
-            mock_subprocess_check_output: Mock
+        self, mock_path_exists: Mock, mock_get_datetime_string: Mock, mock_subprocess_check_output: Mock
     ):
-        called_proc_error = subprocess.CalledProcessError(returncode=2, cmd=["bad"], stderr='something')
+        called_proc_error = subprocess.CalledProcessError(returncode=2, cmd=["bad"], stderr="something")
         mock_subprocess_check_output.side_effect = called_proc_error
         self.assertRaises(JujuControllerBackupError, self.controller_backup.backup)
         self.assertEqual(
             mock_subprocess_check_output.call_count,
             MAX_CONTROLLER_BACKUP_RETRIES,
-            "assert check_output was called {} times.".format(MAX_CONTROLLER_BACKUP_RETRIES)
+            "assert check_output was called {} times.".format(MAX_CONTROLLER_BACKUP_RETRIES),
         )
 
 
 class TestJujuClientConfigBackup(unittest.TestCase):
     @patch("jujubackupall.backup.os")
     def test_juju_client_config_backup_create_no_environ(self, mock_os: Mock):
-        output_path = Path('mypath')
+        output_path = Path("mypath")
         mock_os.environ.get.return_value = None
         class_client_config_location = JujuClientConfigBackup.client_config_location
         juju_config_backup_inst = JujuClientConfigBackup(output_path)
@@ -108,7 +102,7 @@ class TestJujuClientConfigBackup(unittest.TestCase):
     @patch("jujubackupall.backup.os")
     def test_juju_client_config_backup_create_with_environ(self, mock_os: Mock):
         env_path = "alt-path"
-        output_path = Path('mypath')
+        output_path = Path("mypath")
         mock_os.environ.get.return_value = env_path
         juju_config_backup_inst = JujuClientConfigBackup(output_path)
         self.assertEqual(juju_config_backup_inst.client_config_location, Path(env_path))
@@ -116,10 +110,8 @@ class TestJujuClientConfigBackup(unittest.TestCase):
     @patch("jujubackupall.backup.shutil")
     @patch("jujubackupall.backup.ensure_path_exists")
     @patch("jujubackupall.backup.os")
-    def test_juju_client_config_backup(
-            self, mock_os: Mock, mock_ensure_path: Mock, mock_shutil: Mock
-    ):
-        output_path = Path('my/path')
+    def test_juju_client_config_backup(self, mock_os: Mock, mock_ensure_path: Mock, mock_shutil: Mock):
+        output_path = Path("my/path")
         mock_os.environ.get.return_value = None
         mock_shutil.make_archive.return_value = output_path / "archive.tar.gz"
         juju_config_backup_inst = JujuClientConfigBackup(output_path)
@@ -133,11 +125,7 @@ class TestMysqlBackup(unittest.TestCase):
     def test_backup_innodb(self, mock_check_output_unit_action: Mock):
         mock_unit = Mock()
         mysql_dumpfile = "mydumpfile"
-        results_dict = {
-            "results": {
-                "mysqldump-file": mysql_dumpfile
-            }
-        }
+        results_dict = {"results": {"mysqldump-file": mysql_dumpfile}}
         mock_check_output_unit_action.return_value = results_dict
         mysql_innodb_backup = MysqlInnodbBackup(mock_unit)
         mysql_innodb_backup.backup()
@@ -148,10 +136,10 @@ class TestMysqlBackup(unittest.TestCase):
     @patch("jujubackupall.backup.scp_from_unit")
     @patch("jujubackupall.backup.ssh_run_on_unit")
     def test_download_backup_innodb(
-            self,
-            mock_ssh_run_on_unit: Mock,
-            mock_scp_from_unit: Mock,
-            mock_ensure_path_exists: Mock,
+        self,
+        mock_ssh_run_on_unit: Mock,
+        mock_scp_from_unit: Mock,
+        mock_ensure_path_exists: Mock,
     ):
         save_path = Path("my-path")
         backup_filepath = Path("some-path")
@@ -161,27 +149,21 @@ class TestMysqlBackup(unittest.TestCase):
         mysql_innodb_backup.download_backup(save_path)
         mock_ensure_path_exists.assert_called_once_with(path=save_path)
         mock_scp_from_unit.assert_called_once_with(
-            unit=mock_unit,
-            source=str("/tmp/" / backup_filepath),
-            destination=str(save_path)
+            unit=mock_unit, source=str("/tmp/" / backup_filepath), destination=str(save_path)
         )
         self.assertEqual(mock_ssh_run_on_unit.call_count, 2, "assert ssh run on unit called twice")
 
     @patch("jujubackupall.backup.check_output_unit_action")
     def test_percona_backup_setting_pxc(self, mock_check_output_unit_action: Mock):
         mock_unit = Mock()
-        results_dict = {
-            "results": {
-                "mysqldump-file": "mysql_dumpfile"
-            }
-        }
+        results_dict = {"results": {"mysqldump-file": "mysql_dumpfile"}}
         mock_check_output_unit_action.return_value = results_dict
         percona_backup = PerconaClusterBackup(mock_unit)
         percona_backup.backup()
         expected_calls = [
             call(mock_unit, "set-pxc-strict-mode", mode="MASTER"),
             call(mock_unit, "mysqldump"),
-            call(mock_unit, "set-pxc-strict-mode", mode="ENFORCING")
+            call(mock_unit, "set-pxc-strict-mode", mode="ENFORCING"),
         ]
         mock_check_output_unit_action.assert_has_calls(expected_calls)
 
@@ -191,13 +173,7 @@ class TestEtcdBackup(unittest.TestCase):
     def test_etcd_backup(self, mock_check_output_unit_action: Mock):
         mock_unit = Mock()
         expected_path_string = "my_path"
-        results_dict = {
-            "results": {
-                "snapshot": {
-                    "path": expected_path_string
-                }
-            }
-        }
+        results_dict = {"results": {"snapshot": {"path": expected_path_string}}}
         mock_check_output_unit_action.return_value = results_dict
         etcd_backup_inst = EtcdBackup(mock_unit)
         etcd_backup_inst.backup()
@@ -231,11 +207,7 @@ class TestBackupTracker(unittest.TestCase):
 
     @staticmethod
     def generate_expected_output(apps, configs, controllers):
-        d = dict(
-            controller_backups=controllers,
-            config_backups=configs,
-            app_backups=apps
-        )
+        d = dict(controller_backups=controllers, config_backups=configs, app_backups=apps)
         return json.dumps(d, indent=2)
 
     def add_app_backups_to_tracker(self, app_backup_dicts):
@@ -263,46 +235,28 @@ class TestBackupTracker(unittest.TestCase):
             )
 
     def test_report_multi_apps(self):
-        expected_output = self.generate_expected_output(
-            apps=self.app_backups,
-            controllers=[],
-            configs=[]
-        )
+        expected_output = self.generate_expected_output(apps=self.app_backups, controllers=[], configs=[])
         self.add_app_backups_to_tracker(self.app_backups)
         self.assert_stdout(expected_output)
 
     def test_report_one_app(self):
-        expected_output = self.generate_expected_output(
-            apps=self.app_backups[0:1],
-            controllers=[],
-            configs=[]
-        )
+        expected_output = self.generate_expected_output(apps=self.app_backups[0:1], controllers=[], configs=[])
         self.add_app_backups_to_tracker(self.app_backups[0:1])
         self.assert_stdout(expected_output)
 
     def test_report_multi_controllers(self):
-        expected_output = self.generate_expected_output(
-            apps=[],
-            controllers=self.controller_backups,
-            configs=[]
-        )
+        expected_output = self.generate_expected_output(apps=[], controllers=self.controller_backups, configs=[])
         self.add_controller_backups_to_tracker(self.controller_backups)
         self.assert_stdout(expected_output)
 
     def test_multi_configs(self):
-        expected_output = self.generate_expected_output(
-            apps=[],
-            controllers=[],
-            configs=self.config_backups
-        )
+        expected_output = self.generate_expected_output(apps=[], controllers=[], configs=self.config_backups)
         self.add_config_backups_to_tracker(self.config_backups)
         self.assert_stdout(expected_output)
 
     def test_all_no_errors(self):
         expected_output = self.generate_expected_output(
-            apps=self.app_backups,
-            controllers=self.controller_backups,
-            configs=self.config_backups
+            apps=self.app_backups, controllers=self.controller_backups, configs=self.config_backups
         )
         self.add_app_backups_to_tracker(self.app_backups)
         self.add_config_backups_to_tracker(self.config_backups)
@@ -316,8 +270,7 @@ class TestBackupTracker(unittest.TestCase):
             dict(controller="app", app="some-app", error_reason="some other reason"),
         ]
         expected_output = json.dumps(
-            dict(controller_backups=[], config_backups=[], app_backups=[], errors=error_list),
-            indent=2
+            dict(controller_backups=[], config_backups=[], app_backups=[], errors=error_list), indent=2
         )
         for error in error_list:
             self.tracker.add_error(**error)

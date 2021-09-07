@@ -8,7 +8,5 @@ setup(
     use_scm_version=True,
     setup_requires=["setuptools_scm"],
     packages=find_packages(),
-    entry_points={
-        'console_scripts': ['juju-backup-all = jujubackupall.cli:main']
-    }
+    entry_points={"console_scripts": ["juju-backup-all = jujubackupall.cli:main"]},
 )
