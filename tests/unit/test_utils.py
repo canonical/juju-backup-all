@@ -4,37 +4,43 @@ import unittest
 from unittest.mock import patch, Mock
 
 from jujubackupall.errors import ActionError
-from jujubackupall.utils import parse_charm_name, connect_controller, connect_model, get_all_controllers, get_leader, \
-    check_output_unit_action
+from jujubackupall.utils import (
+    parse_charm_name,
+    connect_controller,
+    connect_model,
+    get_all_controllers,
+    get_leader,
+    check_output_unit_action,
+)
 
 
 class TestParseCharmName(unittest.TestCase):
     def test_parse_nonpromulgated_charm(self):
-        charm_url = 'cs:~containers/containerd-146'
+        charm_url = "cs:~containers/containerd-146"
         result = parse_charm_name(charm_url)
-        self.assertEqual(result, 'containerd')
+        self.assertEqual(result, "containerd")
 
     def test_parse_promulgated_charm(self):
-        charm_url = 'cs:mysql-innodb-cluster-9'
+        charm_url = "cs:mysql-innodb-cluster-9"
         result = parse_charm_name(charm_url)
-        self.assertEqual(result, 'mysql-innodb-cluster')
+        self.assertEqual(result, "mysql-innodb-cluster")
 
 
 class TestConnectController(unittest.TestCase):
-    @patch('jujubackupall.utils.Controller', return_value=Mock())
-    @patch('jujubackupall.utils.run_async')
+    @patch("jujubackupall.utils.Controller", return_value=Mock())
+    @patch("jujubackupall.utils.run_async")
     def test_connect_controller_with_name(self, mock_run_async: Mock, mock_controller: Mock):
-        my_controller_name = 'my-controller'
+        my_controller_name = "my-controller"
         mock_controller_instance = mock_controller.return_value
         with connect_controller(my_controller_name) as controller:
             pass
         mock_controller_instance.connect.assert_called_with(my_controller_name)
         mock_controller_instance.disconnect.assert_called_once()
 
-    @patch('jujubackupall.utils.Controller', return_value=Mock())
-    @patch('jujubackupall.utils.run_async')
+    @patch("jujubackupall.utils.Controller", return_value=Mock())
+    @patch("jujubackupall.utils.run_async")
     def test_connect_controller_with_empty_name(self, mock_run_async: Mock, mock_controller: Mock):
-        empty_controller_name = ''
+        empty_controller_name = ""
         mock_controller_instance = mock_controller.return_value
         with connect_controller(empty_controller_name) as controller:
             pass
@@ -43,9 +49,9 @@ class TestConnectController(unittest.TestCase):
 
 
 class TestConnectModel(unittest.TestCase):
-    @patch('jujubackupall.utils.run_async')
+    @patch("jujubackupall.utils.run_async")
     def test_connect_model(self, mock_run_async: Mock):
-        model_name = 'my-model'
+        model_name = "my-model"
         mock_model = Mock()
         mock_controller = Mock()
         mock_run_async.return_value = mock_model
@@ -56,27 +62,22 @@ class TestConnectModel(unittest.TestCase):
 
 
 class TestGetAllControllers(unittest.TestCase):
-    @patch('jujubackupall.utils.json.load')
-    @patch('jujubackupall.utils.subprocess.check_output')
+    @patch("jujubackupall.utils.json.load")
+    @patch("jujubackupall.utils.subprocess.check_output")
     def test_get_all_controllers(self, mock_check_output: Mock, mock_json_load: Mock):
-        controller_name_1 = 'my-controller-1'
-        controller_name_2 = 'my-controller-2'
-        controller_dict = {
-            'controllers': {
-                controller_name_1: None,
-                controller_name_2: None
-            }
-        }
+        controller_name_1 = "my-controller-1"
+        controller_name_2 = "my-controller-2"
+        controller_dict = {"controllers": {controller_name_1: None, controller_name_2: None}}
         mock_json_load.return_value = controller_dict
         actual_controller_names = get_all_controllers()
-        mock_check_output.assert_called_with('juju controllers --format json'.split())
-        self.assertEqual(len(actual_controller_names), 2, 'assert excpected number of controller names returned')
+        mock_check_output.assert_called_with("juju controllers --format json".split())
+        self.assertEqual(len(actual_controller_names), 2, "assert excpected number of controller names returned")
         self.assertIn(controller_name_1, actual_controller_names)
         self.assertIn(controller_name_2, actual_controller_names)
 
 
 class TestGetLeader(unittest.TestCase):
-    @patch('jujubackupall.utils.run_async')
+    @patch("jujubackupall.utils.run_async")
     def test_get_leader(self, mock_run_async: Mock):
         mock_units = [Mock() for _ in range(3)]
         mock_units[0].is_leader_from_status.return_value = False
@@ -89,7 +90,7 @@ class TestGetLeader(unittest.TestCase):
 
 
 class TestCheckOutputUnitAction(unittest.TestCase):
-    @patch('jujubackupall.utils.run_async')
+    @patch("jujubackupall.utils.run_async")
     def test_check_output_unit_action_success_no_params(self, mock_run_async: Mock):
         action_name = "my-action"
         safe_data = dict(status="completed")
@@ -103,7 +104,7 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         mock_unit.run_action.assert_called_once_with(action_name)
         mock_action.wait.assert_called_once()
 
-    @patch('jujubackupall.utils.run_async')
+    @patch("jujubackupall.utils.run_async")
     def test_check_output_unit_action_success_with_params(self, mock_run_async: Mock):
         action_name = "my-action"
         action_params = dict(param_one="hello", param_two="world")
@@ -118,7 +119,7 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         mock_unit.run_action.assert_called_once_with(action_name, **action_params)
         mock_action.wait.assert_called_once()
 
-    @patch('jujubackupall.utils.run_async')
+    @patch("jujubackupall.utils.run_async")
     def test_check_output_unit_action_failure(self, mock_run_async: Mock):
         action_name = "my-action"
         failure_status = "failure"
@@ -134,5 +135,5 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         self.assertTrue(context.exception.results(), failure_results)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

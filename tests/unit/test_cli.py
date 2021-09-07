@@ -11,9 +11,9 @@ from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 all_controllers = False
 backup_controller = True
 backup_juju_client_config = True
-controllers = ['controller1', 'controller2']
-excluded_charms = ['mysql']
-output_dir = 'my_output_dir'
+controllers = ["controller1", "controller2"]
+excluded_charms = ["mysql"]
+output_dir = "my_output_dir"
 log_level = "INFO"
 
 
@@ -32,8 +32,8 @@ class TestCli(unittest.TestCase):
         )
         return args_dict
 
-    @patch('jujubackupall.cli.Config')
-    @patch('jujubackupall.cli.make_cli_parser')
+    @patch("jujubackupall.cli.Config")
+    @patch("jujubackupall.cli.make_cli_parser")
     def test_cli_init(self, mock_make_parser: Mock, mock_config: Mock):
         arg_namespace = argparse.Namespace(**self.args())
         mock_parser = Mock()
@@ -43,12 +43,12 @@ class TestCli(unittest.TestCase):
         mock_config.assert_called_once_with(self.args())
         self.assertIsInstance(cli, Cli)
 
-    @patch('jujubackupall.cli.logging')
-    @patch('jujubackupall.cli.Config')
-    @patch('jujubackupall.cli.make_cli_parser')
-    @patch('jujubackupall.cli.BackupProcessor')
+    @patch("jujubackupall.cli.logging")
+    @patch("jujubackupall.cli.Config")
+    @patch("jujubackupall.cli.make_cli_parser")
+    @patch("jujubackupall.cli.BackupProcessor")
     def test_cli_run(
-            self, mock_backup_processor_class: Mock, mock_make_parser: Mock, mock_config_class: Mock, mock_logging: Mock
+        self, mock_backup_processor_class: Mock, mock_make_parser: Mock, mock_config_class: Mock, mock_logging: Mock
     ):
         mock_config_inst = Mock()
         mock_backup_processor_inst = Mock()
@@ -65,25 +65,25 @@ class TestMakeParser(unittest.TestCase):
         parser = make_cli_parser()
         for charm in SUPPORTED_BACKUP_CHARMS:
             with self.subTest(charm=charm):
-                res = parser.parse_args(['--exclude-charm', charm])
+                res = parser.parse_args(["--exclude-charm", charm])
                 self.assertListEqual(res.excluded_charms, [charm])
 
     def test_exclude_all_charms(self):
         parser = make_cli_parser()
         full_args = []
         for i in range(len(SUPPORTED_BACKUP_CHARMS)):
-            full_args.append('--exclude-charm')
+            full_args.append("--exclude-charm")
             full_args.append(SUPPORTED_BACKUP_CHARMS[i])
         res = parser.parse_args(full_args)
         self.assertListEqual(res.excluded_charms, SUPPORTED_BACKUP_CHARMS)
 
-    @patch('sys.stderr', new_callable=StringIO)
+    @patch("sys.stderr", new_callable=StringIO)
     def test_exclude_charm_not_supported_fails(self, mock_stderr):
         parser = make_cli_parser()
         with self.assertRaises(SystemExit):
-            parser.parse_args(['--exclude-charm', 'a-charm'])
-        self.assertRegexpMatches(mock_stderr.getvalue(), r'a-charm')
+            parser.parse_args(["--exclude-charm", "a-charm"])
+        self.assertRegexpMatches(mock_stderr.getvalue(), r"a-charm")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
