@@ -17,12 +17,12 @@ repos:
     hooks:
       - id: flake8
         args: [
-            "jujubackupall",
-            "tests",
-            "setup.py",
             "--max-line-length=120",
             "--max-complexity=10",
-            "--ignore=C901,D103,D100,D101,D102,D107,D104"
+            "--ignore=C901,D103,D100,D101,D102,D107,D104",
+            "jujubackupall",
+            "tests",
+            "setup.py"
         ]
   - repo: https://github.com/pycqa/isort
     rev: 5.8.0
