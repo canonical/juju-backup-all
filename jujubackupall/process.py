@@ -124,7 +124,7 @@ class ControllerProcessor:
         model_names: List[str] = run_async(self.controller.list_models())
         self._log("Models to process {}".format(model_names))
         for model_name in model_names:
-            with connect_model(model_name) as model:
+            with connect_model(self.controller, model_name) as model:
                 self._log("Backing up apps.", model_name=model_name)
                 self.backup_apps(JujuModel(name=model_name, model=model))
 
