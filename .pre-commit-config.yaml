@@ -1,0 +1,31 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.0.1
+    hooks:
+      - id: check-executables-have-shebangs
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-added-large-files
+  - repo: https://github.com/ambv/black
+    rev: 21.8b0
+    hooks:
+      - id: black
+        args: ["--check", "--diff", "--line-length=120", "jujubackupall", "tests", "setup.py"]
+  - repo: https://gitlab.com/pycqa/flake8
+    rev: 3.9.2
+    hooks:
+      - id: flake8
+        args: [
+            "jujubackupall",
+            "tests",
+            "setup.py",
+            "--max-line-length=120",
+            "--max-complexity=10",
+            "--ignore=C901,D103,D100,D101,D102,D107,D104"
+        ]
+  - repo: https://github.com/pycqa/isort
+    rev: 5.8.0
+    hooks:
+      - id: isort
+        args: ["--profile=black", "jujubackupall", "tests"]
