@@ -37,7 +37,7 @@ from jujubackupall.errors import ActionError
 @contextmanager
 def connect_controller(controller_name: str) -> Controller:
     """Handle connecting to and disconnecting from a Juju Controller."""
-    controller = Controller()
+    controller = Controller(max_frame_size=MAX_FRAME_SIZE)
     if controller_name:
         run_async(controller.connect(controller_name))
     else:
@@ -49,10 +49,9 @@ def connect_controller(controller_name: str) -> Controller:
 
 
 @contextmanager
-def connect_model(model_name: str) -> Model:
+def connect_model(controller: Controller, model_name: str) -> Model:
     """Handle connecting to and disconnecting from a Juju Model."""
-    model = Model(max_frame_size=MAX_FRAME_SIZE)
-    run_async(model.connect(model_name))
+    model = run_async(controller.get_model(model_name))
     try:
         yield model
     finally:
