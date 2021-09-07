@@ -8,8 +8,8 @@ This Juju plugin allows operators to backup juju controllers as well as the foll
 - [PostgreSQL](https://charmhub.io/postgresql)
 - [etcd](https://charmhub.io/etcd)
 
-The plugin enumerates through all controllers, backing up the controller and scanning through each model for any 
-applications that can be backed up. It then saves these backups 
+The plugin enumerates through all controllers, backing up the controller and scanning through each model for any
+applications that can be backed up. It then saves these backups
 
 ## Usage
 
@@ -19,7 +19,7 @@ This tool primarily auto-discovers controllers/charms that need backing up. To b
 juju-backup-all
 ```
 
-This will backup all apps of all models (in the current controller) of supported charms and output them into 
+This will backup all apps of all models (in the current controller) of supported charms and output them into
 `juju-backups/` directory. It will also backup the local juju client config.
 
 For a more complex command, here's an example that specifies an output directory, excludes certain charms, excludes the
@@ -29,7 +29,7 @@ juju client config backup, and runs backups on all controllers.
 juju-backup-all -o my/backups/ \
   -e postgresql \
   -e etcd \
-  --all-controllers 
+  --all-controllers
 ```
 
 The following command will give all the possible arguments that can be passed to the tool:
@@ -88,7 +88,7 @@ These include:
 - `PYTEST_KEEP_MODELS`: keeps the models after running functional tests. This helps in debugging and reuse of models
 for quicker testing
 - `PYTEST_MYSQL_MODEL`, `PYTEST_PERCONA_MODEL`: setting these to a current model will have the functional tests use
-that model instead of deploying another one. 
+that model instead of deploying another one.
 - `JUJU_DATA`: Specify where your juju client config directory is located. If not set, it will default to
 `~/.local/share/juju`. This is needed in functional testing as the tool runs some subprocess `juju` commands
 (like `juju create-backup`) and without this set, the environment for functional tests has no info on controllers.

@@ -1,16 +1,16 @@
 #!/usr/bin/python3
 """ Unit tests for utils.py """
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
 from jujubackupall.errors import ActionError
 from jujubackupall.utils import (
-    parse_charm_name,
+    check_output_unit_action,
     connect_controller,
     connect_model,
     get_all_controllers,
     get_leader,
-    check_output_unit_action,
+    parse_charm_name,
 )
 
 
@@ -32,7 +32,7 @@ class TestConnectController(unittest.TestCase):
     def test_connect_controller_with_name(self, mock_run_async: Mock, mock_controller: Mock):
         my_controller_name = "my-controller"
         mock_controller_instance = mock_controller.return_value
-        with connect_controller(my_controller_name) as controller:
+        with connect_controller(my_controller_name):
             pass
         mock_controller_instance.connect.assert_called_with(my_controller_name)
         mock_controller_instance.disconnect.assert_called_once()
@@ -42,7 +42,7 @@ class TestConnectController(unittest.TestCase):
     def test_connect_controller_with_empty_name(self, mock_run_async: Mock, mock_controller: Mock):
         empty_controller_name = ""
         mock_controller_instance = mock_controller.return_value
-        with connect_controller(empty_controller_name) as controller:
+        with connect_controller(empty_controller_name):
             pass
         mock_controller_instance.connect.assert_called_once_with()
         mock_controller_instance.disconnect.assert_called_once()
@@ -55,7 +55,7 @@ class TestConnectModel(unittest.TestCase):
         mock_model = Mock()
         mock_controller = Mock()
         mock_run_async.return_value = mock_model
-        with connect_model(mock_controller, model_name) as model:
+        with connect_model(mock_controller, model_name):
             pass
         mock_controller.get_model.assert_called_with(model_name)
         mock_model.disconnect.assert_called_once()

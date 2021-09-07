@@ -1,17 +1,13 @@
 """Test juju-backup-all on multi-model controller"""
-import asyncio
 import glob
 import json
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 import pytest
-from juju.model import Model
+from conftest import JujuModel
 from juju.application import Application
 from juju.controller import Controller
-from juju.unit import Unit
-
-from conftest import JujuModel
 
 pytestmark = [pytest.mark.asyncio]
 
@@ -24,7 +20,7 @@ async def test_sanity_deployment(mysql_innodb_app: Application, percona_cluster_
 async def test_mysql_innodb_backup(
     mysql_innodb_model: JujuModel, tmp_path: Path, controller: Controller, mysql_innodb_app: Application
 ):
-    model_name, model = mysql_innodb_model.model_name, mysql_innodb_model.model
+    model_name = mysql_innodb_model.model_name
     controller_name = controller.controller_name
     mysql_innodb_app_name = "mysql"
     output = subprocess.check_output(
@@ -44,7 +40,7 @@ async def test_mysql_innodb_backup(
 async def test_percona_backup(
     percona_cluster_model: JujuModel, tmp_path: Path, controller: Controller, percona_cluster_app: Application
 ):
-    model_name, model = percona_cluster_model.model_name, percona_cluster_model.model
+    model_name = percona_cluster_model.model_name
     controller_name = controller.controller_name
     percona_app_name = "percona-cluster"
     output = subprocess.check_output(
@@ -58,7 +54,7 @@ async def test_percona_backup(
     assert any(x.get("model") == model_name for x in output_dict.get("app_backups"))
     assert app_backup_entry.get("charm") in percona_cluster_app.data.get("charm-url")
     assert expected_output_dir.exists()
-    assert glob.glob(str(expected_output_dir) + "/mysqldump-all-databases*.gz".format(percona_app_name))
+    assert glob.glob(str(expected_output_dir) + "/mysqldump-all-databases*.gz")
 
 
 async def test_juju_controller_backup(tmp_path: Path, controller: Controller):
@@ -90,7 +86,7 @@ async def test_juju_client_config_backup(tmp_path: Path):
 
 
 async def test_etcd_backup(etcd_model: JujuModel, etcd_app: Application, tmp_path: Path, controller: Controller):
-    model_name, model = etcd_model.model_name, etcd_model.model
+    model_name = etcd_model.model_name
     controller_name = controller.controller_name
     etcd_app_name = "etcd"
     output = subprocess.check_output(

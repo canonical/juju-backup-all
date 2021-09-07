@@ -4,7 +4,6 @@ import unittest
 
 from jujubackupall.config import Config
 
-
 all_controllers = False
 backup_controller = True
 controllers = ["controller1", "controller2"]

@@ -26,7 +26,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
-from typing import TypeVar, List, Dict
+from typing import Dict, List, TypeVar
 
 from juju.controller import Controller
 from juju.unit import Unit
@@ -34,9 +34,9 @@ from juju.unit import Unit
 from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
 from jujubackupall.errors import JujuControllerBackupError
 from jujubackupall.utils import (
+    check_output_unit_action,
     ensure_path_exists,
     get_datetime_string,
-    check_output_unit_action,
     scp_from_unit,
     ssh_run_on_unit,
 )
