@@ -2,21 +2,21 @@
 """ Unit tests for backup.py """
 import io
 import json
-from pathlib import Path
 import subprocess
 import unittest
-from unittest.mock import Mock, patch, ANY, call
+from pathlib import Path
+from unittest.mock import Mock, call, patch
 
 from jujubackupall.backup import (
+    BackupTracker,
+    EtcdBackup,
+    JujuClientConfigBackup,
+    JujuControllerBackup,
     MysqlInnodbBackup,
     PerconaClusterBackup,
-    get_charm_backup_instance,
     PostgresqlBackup,
-    EtcdBackup,
     SwiftBackup,
-    JujuControllerBackup,
-    JujuClientConfigBackup,
-    BackupTracker,
+    get_charm_backup_instance,
 )
 from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
 from jujubackupall.errors import JujuControllerBackupError
@@ -51,17 +51,6 @@ class TestJujuControllerBackup(unittest.TestCase):
     ):
         self.controller_backup.backup()
         mock_subprocess.check_output.assert_called_once()
-
-    @patch("jujubackupall.backup.subprocess.check_output")
-    @patch("jujubackupall.backup.get_datetime_string")
-    @patch("jujubackupall.backup.ensure_path_exists")
-    def test_backup_controller_one_fail_then_success(
-        self, mock_path_exists: Mock, mock_get_datetime_string: Mock, mock_subprocess_check_output: Mock
-    ):
-        called_proc_error = subprocess.CalledProcessError(returncode=2, cmd=["bad"], stderr="something")
-        mock_subprocess_check_output.side_effect = [called_proc_error, "", 10]
-        self.controller_backup.backup()
-        self.assertEqual(mock_subprocess_check_output.call_count, 2, "assert check_output was called twice.")
 
     @patch("jujubackupall.backup.subprocess.check_output")
     @patch("jujubackupall.backup.get_datetime_string")

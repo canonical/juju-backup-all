@@ -8,16 +8,15 @@ test_preserve_model:
     if set, the testing model won't be torn down at the end of the testing session
 """
 import asyncio
-from collections import namedtuple
 import os
 import uuid
+from collections import namedtuple
 
 import pytest
 from juju.application import Application
 from juju.controller import Controller
-from juju.model import Model
 from juju.errors import JujuConnectionError
-
+from juju.model import Model
 
 JujuModel = namedtuple("JujuModel", ["model_name", "model"])
 

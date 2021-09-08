@@ -1,12 +1,12 @@
 #!/usr/bin/python3
 """ Unit tests for cli.py """
+import unittest
 from collections import namedtuple
 from pathlib import Path
-import unittest
-from unittest.mock import Mock, patch, call, ANY
+from unittest.mock import ANY, Mock, call, patch
 
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
-from jujubackupall.errors import JujuControllerBackupError, ActionError
+from jujubackupall.errors import ActionError, JujuControllerBackupError
 from jujubackupall.process import BackupProcessor, ControllerProcessor, JujuModel
 
 SubtestCase = namedtuple("SubtestCase", ["name", "input", "expected"])
