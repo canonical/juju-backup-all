@@ -21,4 +21,4 @@ repos:
     rev: 5.8.0
     hooks:
       - id: isort
-        args: ["jujubackupall", "tests"]
+        args: ["--check-only", "jujubackupall", "tests"]
