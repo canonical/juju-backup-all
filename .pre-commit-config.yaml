@@ -16,16 +16,9 @@ repos:
     rev: 3.9.2
     hooks:
       - id: flake8
-        args: [
-            "--max-line-length=120",
-            "--max-complexity=10",
-            "--ignore=C901,D103,D100,D101,D102,D107,D104",
-            "jujubackupall",
-            "tests",
-            "setup.py"
-        ]
+        args: ["jujubackupall", "tests", "setup.py"]
   - repo: https://github.com/pycqa/isort
     rev: 5.8.0
     hooks:
       - id: isort
-        args: ["--profile=black", "jujubackupall", "tests"]
+        args: ["jujubackupall", "tests"]
