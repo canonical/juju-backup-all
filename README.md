@@ -64,8 +64,11 @@ juju-backups/
 To set up development environment:
 
 ```bash
-make venv
-. venv-all/bin/activate
+make install-dev
+. venv/bin/activate
+
+# if pre-commit hooks desired:
+pre-commit install
 ```
 
 ### Functional tests
@@ -87,7 +90,7 @@ These include:
 
 - `PYTEST_KEEP_MODELS`: keeps the models after running functional tests. This helps in debugging and reuse of models
 for quicker testing
-- `PYTEST_MYSQL_MODEL`, `PYTEST_PERCONA_MODEL`: setting these to a current model will have the functional tests use
+- `PYTEST_MYSQL_MODEL`, `PYTEST_PERCONA_MODEL`, `PYTEST_ETCD_MODEL`: setting these to a current model will have the functional tests use
 that model instead of deploying another one.
 - `JUJU_DATA`: Specify where your juju client config directory is located. If not set, it will default to
 `~/.local/share/juju`. This is needed in functional testing as the tool runs some subprocess `juju` commands
@@ -103,10 +106,10 @@ To run unit tests:
 make unit
 ```
 
-To run unit tests and also generate html converage reports:
+To run unit tests and also generate html coverage reports:
 
 ```bash
-make unit-html-report
+make unit-coverage
 ```
 
 ## Building and Installing Snap Locally
