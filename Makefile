@@ -20,33 +20,50 @@ unit:
 		@echo Executing unit tests with coverage reports
 		@tox -e unit
 
-unit-html-report: unit
+unit-coverage: unit
 		@echo Generating html unit test coverage report
-		@tox -e htmlreport
+		@tox -e cover
 
-venv:
-		@echo "Creating venv. Grabbing requirements.txt from root, tests/unit and tests/functional"
-		@test -d venv-all || python3 -m venv venv-all
-		@. venv-all/bin/activate && pip install \
-			-r requirements.txt \
+install: venv
+		@echo "Installing base requirements."
+		@. venv/bin/activate
+		@pip install --upgrade pip setuptools wheel
+		@pip install -r requirements.txt
+
+install-dev: install
+		@echo "Grabbing requirements from requirements-dev, tests/unit, and tests/functional."
+		@. venv/bin/activate
+		@pip install \
+			-r requirements-dev.txt \
 			-r tests/functional/requirements.txt \
 			-r tests/unit/requirements.txt
+		python setup.py develop
 
-lint-report:
-		@tox -e lintreport
+venv:
+		@echo "Creating venv."
+		@test -d venv || python3 -m venv venv
+
+clean:
+		@echo "Cleaning tox, eggs, caches, coverages, and juju-backups"
+		@if [ -d .tox ] ; then rm -r .tox ; fi
+		@if [ -d *.egg-info ] ; then rm -r *.egg-info ; fi
+		@if [ -d .eggs ] ; then rm -r .eggs ; fi
+		@if [ -d report ] ; then rm -r report ; fi
+		@if [ -d .pytest_cache ] ; then rm -r .pytest_cache ; fi
+		@if [ -d htmlcov ] ; then rm -r htmlcov ; fi
+		@if [ -f .coverage ] ; then rm .coverage ; fi
+		@if [ -d juju-backups ] ; then rm -r juju-backups ; fi
+		@if [ -d build ] ; then rm -r build ; fi
+		@find . -iname __pycache__ -exec rm -r {} +
 
 lint:
 		@tox -e lint
 
-clean:
-		@echo "Cleaning tox, report, and egg-infos"
-		@if [ -d .tox ] ; then rm -r .tox ; fi
-		@if [ -d *.egg-info ] ; then rm -r *.egg-info ; fi
-		@if [ -d report ] ; then rm -r report ; fi
-		@find . -iname __pycache__ -exec rm -r {} +
+format:
+		@tox -e format
 
-black-check:
-		@tox -e blackcheck
+build:
+		@python setup.py build
 
 snap:
 		@echo "Building snap using lxd"
@@ -56,4 +73,4 @@ snap-clean:
 		@echo "Cleaning up snap"
 		@snapcraft clean --use-lxd
 
-.PHONY: snap
+.PHONY: build clean format install install-dev lint snap snap-clean venv
