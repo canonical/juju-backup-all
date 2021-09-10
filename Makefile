@@ -26,18 +26,23 @@ unit-coverage: unit
 
 install: venv
 		@echo "Installing base requirements."
-		@. venv/bin/activate
-		@pip install --upgrade pip setuptools wheel
-		@pip install -r requirements.txt
+		( \
+			. venv/bin/activate; \
+			pip install --upgrade pip setuptools wheel; \
+			pip install -r requirements.txt; \
+		)
 
 install-dev: install
 		@echo "Grabbing requirements from requirements-dev, tests/unit, and tests/functional."
-		@. venv/bin/activate
-		@pip install \
-			-r requirements-dev.txt \
-			-r tests/functional/requirements.txt \
-			-r tests/unit/requirements.txt
-		python setup.py develop
+		( \
+			. venv/bin/activate; \
+			pip install \
+				-r requirements-dev.txt \
+				-r tests/functional/requirements.txt \
+				-r tests/unit/requirements.txt; \
+			python setup.py develop; \
+		)
+
 
 venv:
 		@echo "Creating venv."
