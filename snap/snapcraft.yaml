@@ -1,5 +1,5 @@
 name: juju-backup-all
-base: core18
+base: core20
 adopt-info: juju-backup-all
 summary: Tool for backing up charms, local configs, and Juju controllers.
 description: |
@@ -16,6 +16,8 @@ confinement: classic
 apps:
   juju-backup-all:
     command: bin/juju-backup-all
+    environment:
+      PATH: $SNAP/bin:$SNAP/usr/bin:$PATH
 
 parts:
   juju-backup-all:
@@ -28,3 +30,15 @@ parts:
       snapcraftctl build
       echo "Version: $(python3 setup.py --version)"
       snapcraftctl set-version "$(python3 setup.py --version)"
+    stage-packages:
+      - libpython3-stdlib
+      - libpython3.8-stdlib
+      - libpython3.8-minimal
+      - python3-pip
+      - python3-setuptools
+      - python3-wheel
+      - python3-venv
+      - python3-minimal
+      - python3-distutils
+      - python3-pkg-resources
+      - python3.8-minimal

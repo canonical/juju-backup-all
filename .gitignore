@@ -12,3 +12,4 @@ __pycache__
 flake/
 *.snap
 build/
+dist/
