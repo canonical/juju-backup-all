@@ -71,9 +71,9 @@ def make_cli_parser():
         "-j", "--exclude-juju-client-config-backup", dest="backup_juju_client_config", action="store_false"
     )
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("-C", "--controller", dest="controllers", action="append")
+    group.add_argument("-c", "--controller", dest="controllers", action="append")
     group.add_argument("-A", "--all-controllers", action="store_true")
-    group.add_argument(
+    parser.add_argument(
         "-l",
         "--log",
         dest="log_level",
