@@ -62,15 +62,15 @@ class TestConnectModel(unittest.TestCase):
 
 
 class TestGetAllControllers(unittest.TestCase):
-    @patch("jujubackupall.utils.json.load")
-    @patch("jujubackupall.utils.subprocess.check_output")
-    def test_get_all_controllers(self, mock_check_output: Mock, mock_json_load: Mock):
+    @patch("jujubackupall.utils.Juju")
+    def test_get_all_controllers(self, mock_juju_class: Mock):
         controller_name_1 = "my-controller-1"
         controller_name_2 = "my-controller-2"
-        controller_dict = {"controllers": {controller_name_1: None, controller_name_2: None}}
-        mock_json_load.return_value = controller_dict
+        controller_dict = {controller_name_1: None, controller_name_2: None}
+        mock_juju_inst = Mock()
+        mock_juju_inst.get_controllers.return_value = controller_dict
+        mock_juju_class.return_value = mock_juju_inst
         actual_controller_names = get_all_controllers()
-        mock_check_output.assert_called_with("juju controllers --format json".split())
         self.assertEqual(len(actual_controller_names), 2, "assert excpected number of controller names returned")
         self.assertIn(controller_name_1, actual_controller_names)
         self.assertIn(controller_name_2, actual_controller_names)
