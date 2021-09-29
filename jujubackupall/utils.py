@@ -17,15 +17,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides utility functions."""
-import json
 import os
-import subprocess
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import List
 
 from juju.action import Action
 from juju.controller import Controller
+from juju.juju import Juju
 from juju.loop import run as run_async
 from juju.model import Model
 from juju.unit import Unit
@@ -63,9 +62,8 @@ def ensure_path_exists(path):
 
 
 def get_all_controllers() -> List[str]:
-    juju_controllers_output = subprocess.check_output("juju controllers --format json".split())
-    juju_controllers_json = json.loads(juju_controllers_output)
-    juju_controller_names = [key for key in juju_controllers_json.get("controllers").keys()]
+    juju_local_env = Juju()
+    juju_controller_names = list(juju_local_env.get_controllers().keys())
     return juju_controller_names
 
 

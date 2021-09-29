@@ -1,1 +1,1 @@
-juju
+git+git://github.com/juju/python-libjuju.git@3d54f75#egg=juju
