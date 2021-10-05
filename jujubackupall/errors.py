@@ -17,9 +17,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module containing package specific errors."""
-import subprocess
-
 from juju.action import Action
+from juju.errors import JujuAPIError
 
 
 class BackupError(Exception):
@@ -27,15 +26,13 @@ class BackupError(Exception):
 
 
 class JujuControllerBackupError(BackupError):
-    def __init__(self, cmd_error: subprocess.CalledProcessError):
+    def __init__(self, juju_api_error: JujuAPIError):
         super().__init__()
-        self.cmd_error = cmd_error
+        self.juju_api_error = juju_api_error
 
     def __str__(self):
         """Return string representation of JujuControllerBackupError."""
-        return "{}: {}\nCommand Output: {}".format(
-            self.__class__.__name__, self.cmd_error, self.cmd_error.output.decode()
-        )
+        return "{}: {}".format(self.__class__.__name__, self.juju_api_error)
 
 
 class ActionError(Exception):

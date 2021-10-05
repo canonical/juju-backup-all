@@ -20,12 +20,13 @@
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Tuple
 
 from juju.action import Action
 from juju.controller import Controller
 from juju.juju import Juju
 from juju.loop import run as run_async
+from juju.machine import Machine
 from juju.model import Model
 from juju.unit import Unit
 
@@ -97,5 +98,18 @@ def ssh_run_on_unit(unit: Unit, command: str, user="ubuntu"):
     run_async(unit.ssh(command=command, user=user))
 
 
+def ssh_run_on_machine(machine: Machine, command: str, user="ubuntu"):
+    run_async(machine.ssh(command=command, user=user))
+
+
 def scp_from_unit(unit: Unit, source: str, destination: str):
     run_async(unit.scp_from(source=source, destination=destination))
+
+
+def scp_from_machine(machine: Machine, source: str, destination: str):
+    run_async(machine.scp_from(source=source, destination=destination))
+
+
+def backup_controller(controller: Controller) -> Tuple[Model, dict]:
+    controller_model: Model = run_async(controller.get_model("controller"))
+    return controller_model, run_async(controller_model.create_backup())

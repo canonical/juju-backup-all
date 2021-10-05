@@ -21,7 +21,6 @@ import dataclasses
 import json
 import os
 import shutil
-import subprocess
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 from logging import getLogger
@@ -29,15 +28,20 @@ from pathlib import Path
 from typing import Dict, List, TypeVar
 
 from juju.controller import Controller
+from juju.errors import JujuAPIError
+from juju.machine import Machine
 from juju.unit import Unit
 
 from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
 from jujubackupall.errors import JujuControllerBackupError
 from jujubackupall.utils import (
+    backup_controller,
     check_output_unit_action,
     ensure_path_exists,
     get_datetime_string,
+    scp_from_machine,
     scp_from_unit,
+    ssh_run_on_machine,
     ssh_run_on_unit,
 )
 
@@ -152,41 +156,43 @@ class JujuControllerBackup(BaseBackup):
 
         :raise: JujuControllerBackupError: If all tried backups fail
         """
-        filename = "juju-controller-backup-{}.tar.gz".format(get_datetime_string())
-        save_file_path = self.save_path / filename
-        command = "juju create-backup -m {}:controller --filename {}".format(
-            self.controller.controller_name, save_file_path
-        )
-        ensure_path_exists(path=self.save_path)
-
-        def try_backup():
-            output = subprocess.check_output(command.split(), stderr=subprocess.STDOUT)
-            logger.debug("juju create-backup output:\n{}".format(output.decode() if output else ""))
-
         # retry controller backup commands. If all fail, raise last error
         last_error = None
         for i in range(MAX_CONTROLLER_BACKUP_RETRIES):
             try:
                 logger.info("[{}] Attempt #{} for controller backup.".format(self.controller.controller_name, i + 1))
-                try_backup()
+                controller_model, result_dict = backup_controller(self.controller)
                 break
-            except subprocess.CalledProcessError as called_proc_error:
-                error_msg = "[{}] Attempt #{} Encountered controller backup error: {}\nCommand output: {}".format(
+            except JujuAPIError as juju_api_error:
+                error_msg = "[{}] Attempt #{} Encountered controller backup error: {}".format(
                     self.controller.controller_name,
                     i + 1,
-                    called_proc_error,
-                    called_proc_error.output.decode() if called_proc_error.output else "",
+                    juju_api_error,
                 )
-                last_error = called_proc_error
+                last_error = juju_api_error
                 logger.warning("{}".format(error_msg))
-                continue
         else:
             error_msg = "[{}] All {} controller backup attempts failed.\nLast error: {}".format(
                 self.controller.controller_name, MAX_CONTROLLER_BACKUP_RETRIES, last_error
             )
             logger.error(error_msg)
             raise JujuControllerBackupError(last_error)
-        return save_file_path.absolute()
+
+        filepath, machine_id = Path(result_dict.get("filename")), result_dict.get("controller-machine-id")
+        controller_machine: Machine = controller_model.machines.get(machine_id)
+
+        chown_command = "sudo chown -R ubuntu:ubuntu {}".format(filepath.parent)
+        ssh_run_on_machine(machine=controller_machine, command=chown_command)
+
+        save_filename = "juju-controller-backup-{}.tar.gz".format(get_datetime_string())
+        save_file_path = self.save_path / save_filename
+        ensure_path_exists(self.save_path)
+        scp_from_machine(machine=controller_machine, source=str(filepath), destination=str(save_file_path))
+
+        rm_command = "sudo rm -r {}".format(filepath.parent)
+        ssh_run_on_machine(machine=controller_machine, command=rm_command)
+
+        return Path(save_file_path).absolute()
 
 
 class ClientConfigBackup(BaseBackup, metaclass=ABCMeta):

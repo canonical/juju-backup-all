@@ -2,10 +2,11 @@
 """ Unit tests for backup.py """
 import io
 import json
-import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, call, patch
+
+from juju.errors import JujuAPIError
 
 from jujubackupall.backup import (
     BackupTracker,
@@ -43,37 +44,73 @@ class TestJujuControllerBackup(unittest.TestCase):
         self.mock_save_path = Path("mypath")
         self.controller_backup = JujuControllerBackup(controller=self.mock_controller, save_path=self.mock_save_path)
 
-    @patch("jujubackupall.backup.subprocess")
+    def get_juju_api_error(self):
+        error_result = {
+            "error": "my error",
+            "error-code": 1,
+            "response": "some response",
+            "request-id": "123-abc",
+        }
+        return JujuAPIError(error_result)
+
+    @patch("jujubackupall.backup.scp_from_machine")
+    @patch("jujubackupall.backup.ssh_run_on_machine")
+    @patch("jujubackupall.backup.backup_controller")
     @patch("jujubackupall.backup.get_datetime_string")
     @patch("jujubackupall.backup.ensure_path_exists")
     def test_backup_controller_first_success(
-        self, mock_path_exists: Mock, mock_get_datetime_string: Mock, mock_subprocess: Mock
+        self,
+        mock_path_exists: Mock,
+        mock_get_datetime_string: Mock,
+        mock_backup_controller: Mock,
+        mock_ssh: Mock,
+        mock_scp: Mock,
     ):
-        self.controller_backup.backup()
-        mock_subprocess.check_output.assert_called_once()
+        results_dict = {"filename": "myfile", "controller-machine-id": "0"}
+        mock_controller_model = Mock()
+        mock_backup_controller.return_value = (mock_controller_model, results_dict)
 
-    @patch("jujubackupall.backup.subprocess.check_output")
+        return_path = self.controller_backup.backup()
+
+        mock_backup_controller.assert_called_once_with(self.controller_backup.controller)
+        self.assertEqual(mock_ssh.call_count, 2, "Ensure ssh_run_on_machine was called twice (chown and rm)")
+        mock_scp.assert_called_once()
+        mock_path_exists.assert_called_once_with(self.controller_backup.save_path)
+        mock_get_datetime_string.assert_called_once()
+        self.assertEqual(return_path.parent, self.mock_save_path.absolute())
+
+    @patch("jujubackupall.backup.scp_from_machine")
+    @patch("jujubackupall.backup.ssh_run_on_machine")
+    @patch("jujubackupall.backup.backup_controller")
     @patch("jujubackupall.backup.get_datetime_string")
     @patch("jujubackupall.backup.ensure_path_exists")
     def test_backup_controller_one_fail_then_success(
-        self, mock_path_exists: Mock, mock_get_datetime_string: Mock, mock_subprocess_check_output: Mock
+        self,
+        mock_path_exists: Mock,
+        mock_get_datetime_string: Mock,
+        mock_backup_controller: Mock,
+        mock_ssh: Mock,
+        mock_scp: Mock,
     ):
-        called_proc_error = subprocess.CalledProcessError(returncode=2, cmd=["bad"], stderr="something")
-        mock_subprocess_check_output.side_effect = [called_proc_error, None]
-        self.controller_backup.backup()
-        self.assertEqual(mock_subprocess_check_output.call_count, 2, "assert check_output was called twice.")
+        results_dict = {"filename": "myfile", "controller-machine-id": "0"}
+        mock_controller_model = Mock()
+        mock_backup_controller.side_effect = [self.get_juju_api_error(), (mock_controller_model, results_dict)]
 
-    @patch("jujubackupall.backup.subprocess.check_output")
+        result = self.controller_backup.backup()
+
+        self.assertIsInstance(result, Path)
+        self.assertEqual(mock_backup_controller.call_count, 2, "assert backup_controller was called twice")
+
+    @patch("jujubackupall.backup.backup_controller")
     @patch("jujubackupall.backup.get_datetime_string")
     @patch("jujubackupall.backup.ensure_path_exists")
     def test_backup_controller_all_fail_raise_exception(
-        self, mock_path_exists: Mock, mock_get_datetime_string: Mock, mock_subprocess_check_output: Mock
+        self, mock_path_exists: Mock, mock_get_datetime_string: Mock, mock_backup_controller: Mock
     ):
-        called_proc_error = subprocess.CalledProcessError(returncode=2, cmd=["bad"], stderr="something")
-        mock_subprocess_check_output.side_effect = called_proc_error
+        mock_backup_controller.side_effect = self.get_juju_api_error()
         self.assertRaises(JujuControllerBackupError, self.controller_backup.backup)
         self.assertEqual(
-            mock_subprocess_check_output.call_count,
+            mock_backup_controller.call_count,
             MAX_CONTROLLER_BACKUP_RETRIES,
             "assert check_output was called {} times.".format(MAX_CONTROLLER_BACKUP_RETRIES),
         )
