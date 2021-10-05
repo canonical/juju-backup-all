@@ -19,6 +19,7 @@
 """Main entry point for juju-backup-all CLI tool."""
 import argparse
 import logging
+import os
 
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
@@ -34,6 +35,7 @@ class Cli:
 
     def run(self):
         self._configure_logging()
+        self._configure_juju_data()
         backup_processor = BackupProcessor(self.config)
         backup_processor.process_backups()
 
@@ -58,6 +60,11 @@ class Cli:
         logging.getLogger("juju").setLevel(logging.ERROR)
         logging.getLogger("connector").setLevel(logging.CRITICAL)
         logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+
+    @staticmethod
+    def _configure_juju_data():
+        if os.environ.get("SNAP_REAL_HOME"):
+            os.environ["JUJU_DATA"] = "{}/.local/share/juju".format(os.environ.get("SNAP_REAL_HOME"))
 
 
 def make_cli_parser():

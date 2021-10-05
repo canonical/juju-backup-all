@@ -10,14 +10,19 @@ description: |
 
   Supported charms: mysql-innodb-cluster, percona-cluster, etcd
   Supported config backups: Juju
-grade: devel
-confinement: classic
+confinement: strict
 
 apps:
   juju-backup-all:
     command: bin/juju-backup-all
     environment:
       PATH: $SNAP/bin:$SNAP/usr/bin:$PATH
+      PYTHONPATH: $PYTHONPATH:$SNAP/lib/python3.8/site-packages
+    plugs:
+      - network
+      - home
+      - juju-client-observe
+      - ssh-keys
 
 parts:
   juju-backup-all:
@@ -42,3 +47,4 @@ parts:
       - python3-distutils
       - python3-pkg-resources
       - python3.8-minimal
+      - openssh-client
