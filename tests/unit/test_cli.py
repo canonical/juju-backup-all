@@ -43,12 +43,18 @@ class TestCli(unittest.TestCase):
         mock_config.assert_called_once_with(self.args())
         self.assertIsInstance(cli, Cli)
 
+    @patch("jujubackupall.cli.os")
     @patch("jujubackupall.cli.logging")
     @patch("jujubackupall.cli.Config")
     @patch("jujubackupall.cli.make_cli_parser")
     @patch("jujubackupall.cli.BackupProcessor")
     def test_cli_run(
-        self, mock_backup_processor_class: Mock, mock_make_parser: Mock, mock_config_class: Mock, mock_logging: Mock
+        self,
+        mock_backup_processor_class: Mock,
+        mock_make_parser: Mock,
+        mock_config_class: Mock,
+        mock_logging: Mock,
+        mock_os: Mock,
     ):
         mock_config_inst = Mock()
         mock_backup_processor_inst = Mock()
@@ -58,6 +64,21 @@ class TestCli(unittest.TestCase):
         cli.run()
         mock_backup_processor_class.assert_called_once_with(mock_config_inst)
         mock_backup_processor_inst.process_backups.assert_called_once()
+
+    @patch("jujubackupall.cli.os")
+    def test_configure_juju_data_with_snap(self, mock_os: Mock):
+        snap_real_home = "my-home"
+        environ_dict = dict(SNAP_REAL_HOME=snap_real_home)
+        mock_os.environ = environ_dict
+        Cli._configure_juju_data()
+        self.assertIn(snap_real_home, mock_os.environ["JUJU_DATA"])
+
+    @patch("jujubackupall.cli.os")
+    def test_configure_juju_data_no_snap(self, mock_os: Mock):
+        environ_dict = dict()
+        mock_os.environ = environ_dict
+        Cli._configure_juju_data()
+        self.assertNotIn("JUJU_DATA", mock_os.environ)
 
 
 class TestMakeParser(unittest.TestCase):
