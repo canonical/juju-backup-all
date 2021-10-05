@@ -34,7 +34,7 @@ from jujubackupall.backup import (
 )
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
-from jujubackupall.errors import ActionError, JujuControllerBackupError
+from jujubackupall.errors import ActionError, JujuControllerBackupError, NoLeaderError
 from jujubackupall.utils import (
     connect_controller,
     connect_model,
@@ -142,9 +142,9 @@ class ControllerProcessor:
                 self.backup_app(app=app, app_name=app_name, charm_name=charm_name, model_name=model_name)
 
     def backup_app(self, app: Application, app_name: str, charm_name: str, model_name: str):
-        leader_unit = get_leader(app.units)
-        charm_backup_instance = get_charm_backup_instance(charm_name=charm_name, unit=leader_unit)
         try:
+            leader_unit = get_leader(app.units)
+            charm_backup_instance = get_charm_backup_instance(charm_name=charm_name, unit=leader_unit)
             self._log("Backing up app.", app_name=app_name, model_name=model_name)
             charm_backup_instance.backup()
             self._log("Downloading backup.", app_name=app_name, model_name=model_name)
@@ -173,6 +173,20 @@ class ControllerProcessor:
                 app=app_name,
                 charm=charm_name,
                 error_reason=str(action_error),
+            )
+        except NoLeaderError as leader_error:
+            self._log(
+                "No leader unit found: {}.".format(leader_error),
+                app_name=app_name,
+                model_name=model_name,
+                level=logging.ERROR,
+            )
+            tracker.add_error(
+                controller=self.controller.controller_name,
+                model=model_name,
+                app=app_name,
+                charm=charm_name,
+                error_reason=str(leader_error),
             )
 
     def generate_full_backup_path(self, model_name: str, app_name: str) -> Path:

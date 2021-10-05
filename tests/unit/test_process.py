@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import ANY, Mock, call, patch
 
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
-from jujubackupall.errors import ActionError, JujuControllerBackupError
+from jujubackupall.errors import ActionError, JujuControllerBackupError, NoLeaderError
 from jujubackupall.process import BackupProcessor, ControllerProcessor, JujuModel
 
 SubtestCase = namedtuple("SubtestCase", ["name", "input", "expected"])
@@ -274,6 +274,34 @@ class TestControllerProcessor(unittest.TestCase):
 
         mock_tracker.add_error.assert_called_once_with(
             controller=controller_name, model=model_name, app=app_name, charm=charm_name, error_reason=str(action_error)
+        )
+
+    @patch("jujubackupall.process.get_leader")
+    @patch("jujubackupall.process.ControllerProcessor._log")
+    @patch("jujubackupall.process.tracker")
+    def test_backup_action_no_leader(self, mock_tracker: Mock, mock_log: Mock, mock_get_leader: Mock):
+        model_name = "my-model"
+        charm_name = "my-charm"
+        app_name = "my-app"
+        controller_name = "my-controller"
+        self.mock_controller.controller_name = controller_name
+        mock_application = Mock()
+
+        no_leader_error = NoLeaderError(Mock())
+        mock_get_leader.side_effect = [no_leader_error]
+
+        controller_processor = self.create_controller_processor()
+
+        controller_processor.backup_app(
+            app=mock_application, app_name=app_name, model_name=model_name, charm_name=charm_name
+        )
+
+        mock_tracker.add_error.assert_called_once_with(
+            controller=controller_name,
+            model=model_name,
+            app=app_name,
+            charm=charm_name,
+            error_reason=str(no_leader_error),
         )
 
     def test_generate_full_backup_path(self):

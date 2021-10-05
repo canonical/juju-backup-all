@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from jujubackupall.errors import ActionError
+from jujubackupall.errors import ActionError, NoLeaderError
 from jujubackupall.utils import (
     check_output_unit_action,
     connect_controller,
@@ -87,6 +87,17 @@ class TestGetLeader(unittest.TestCase):
         actual_leader = get_leader(mock_units)
         mock_units[2].is_leader_from_status.assert_called_once()
         self.assertEqual(actual_leader, mock_units[2])
+
+    @patch("jujubackupall.utils.run_async")
+    def test_get_leader_no_leader(self, mock_run: Mock):
+        mock_units = [Mock() for _ in range(3)]
+        mock_units[0].is_leader_from_status.return_value = False
+        mock_units[1].is_leader_from_status.return_value = False
+        mock_units[2].is_leader_from_status.return_value = False
+        mock_run.side_effect = [False, False, False]
+        with self.assertRaises(NoLeaderError):
+            get_leader(mock_units)
+        mock_units[2].is_leader_from_status.assert_called_once()
 
 
 class TestCheckOutputUnitAction(unittest.TestCase):

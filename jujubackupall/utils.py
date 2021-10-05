@@ -31,7 +31,7 @@ from juju.model import Model
 from juju.unit import Unit
 
 from jujubackupall.constants import MAX_FRAME_SIZE
-from jujubackupall.errors import ActionError
+from jujubackupall.errors import ActionError, NoLeaderError
 
 
 @contextmanager
@@ -73,6 +73,7 @@ def get_leader(units: List[Unit]) -> Unit:
         is_leader = run_async(unit.is_leader_from_status())
         if is_leader:
             return unit
+    raise NoLeaderError(units=units)
 
 
 def parse_charm_name(charm_url: str) -> str:
