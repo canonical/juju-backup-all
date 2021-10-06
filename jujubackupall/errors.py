@@ -17,8 +17,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module containing package specific errors."""
+from typing import List
+
 from juju.action import Action
 from juju.errors import JujuAPIError
+from juju.unit import Unit
 
 
 class BackupError(Exception):
@@ -53,3 +56,13 @@ class ActionError(Exception):
 
     def results(self) -> dict:
         return self.action.safe_data.get("results")
+
+
+class NoLeaderError(Exception):
+    def __init__(self, units: List[Unit]):
+        super().__init__()
+        self.units = units
+
+    def __str__(self):
+        """Return string representation of NoLeaderError."""
+        return "{}: No leader could be found for units: {}".format(self.__class__.__name__, self.units)
