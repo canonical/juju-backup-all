@@ -23,6 +23,7 @@ from typing import List, NamedTuple
 
 from juju.application import Application
 from juju.controller import Controller
+from juju.errors import JujuError
 from juju.loop import run as run_async
 from juju.model import Model
 
@@ -160,7 +161,7 @@ class ControllerProcessor:
             self._log(
                 "Backups downloaded to {}".format(resulting_backup_path), app_name=app_name, model_name=model_name
             )
-        except (ActionError, NoLeaderError) as error:
+        except (ActionError, NoLeaderError, JujuError) as error:
             self._log(
                 "App backup not completed: {}.".format(error),
                 app_name=app_name,
