@@ -160,9 +160,9 @@ class ControllerProcessor:
             self._log(
                 "Backups downloaded to {}".format(resulting_backup_path), app_name=app_name, model_name=model_name
             )
-        except ActionError as action_error:
+        except (ActionError, NoLeaderError) as error:
             self._log(
-                "Backup failed: {}.\nFailed action results: {}".format(action_error, action_error.results()),
+                "App backup not completed: {}.".format(error),
                 app_name=app_name,
                 model_name=model_name,
                 level=logging.ERROR,
@@ -172,21 +172,7 @@ class ControllerProcessor:
                 model=model_name,
                 app=app_name,
                 charm=charm_name,
-                error_reason=str(action_error),
-            )
-        except NoLeaderError as leader_error:
-            self._log(
-                "No leader unit found: {}.".format(leader_error),
-                app_name=app_name,
-                model_name=model_name,
-                level=logging.ERROR,
-            )
-            tracker.add_error(
-                controller=self.controller.controller_name,
-                model=model_name,
-                app=app_name,
-                charm=charm_name,
-                error_reason=str(leader_error),
+                error_reason=str(error),
             )
 
     def generate_full_backup_path(self, model_name: str, app_name: str) -> Path:

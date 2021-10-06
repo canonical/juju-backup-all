@@ -45,13 +45,17 @@ class ActionError(Exception):
 
     def __str__(self):
         """Return string representation of ActionError."""
-        return "{}: Action '{}' on unit '{}' with parameters '{}' failed with status '{}' and message '{}'.".format(
-            self.__class__.__name__,
-            self.action.safe_data.get("name"),
-            self.action.safe_data.get("receiver"),
-            self.action.safe_data.get("parameters"),
-            self.action.safe_data.get("status"),
-            self.action.safe_data.get("message"),
+        return (
+            "{}: Action '{}' on unit '{}' with parameters '{}' failed with status '{}' and message '{}'."
+            "\nFailed action results: {}".format(
+                self.__class__.__name__,
+                self.action.safe_data.get("name"),
+                self.action.safe_data.get("receiver"),
+                self.action.safe_data.get("parameters"),
+                self.action.safe_data.get("status"),
+                self.action.safe_data.get("message"),
+                self.action.safe_data.get("results"),
+            )
         )
 
     def results(self) -> dict:
