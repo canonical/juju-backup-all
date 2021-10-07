@@ -15,6 +15,7 @@ controllers = ["controller1", "controller2"]
 excluded_charms = ["mysql"]
 output_dir = "my_output_dir"
 log_level = "INFO"
+timeout = 10 * 60
 
 
 class TestCli(unittest.TestCase):
@@ -29,6 +30,7 @@ class TestCli(unittest.TestCase):
             excluded_charms=excluded_charms,
             output_dir=output_dir,
             log_level=log_level,
+            timeout=timeout,
         )
         return args_dict
 

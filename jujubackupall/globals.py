@@ -16,9 +16,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
-"""Contains constants used throughout the package."""
+"""Holds global variables accessible from any module."""
 
-SUPPORTED_BACKUP_CHARMS = ["mysql-innodb-cluster", "percona-cluster", "etcd"]
-MAX_CONTROLLER_BACKUP_RETRIES = 3
-# NOTE: Workaround for https://github.com/juju/python-libjuju/issues/523
-MAX_FRAME_SIZE = 2 ** 64
+async_timeout = 10 * 60

@@ -53,5 +53,9 @@ class Config:
         return self.args.get("output_dir")
 
     @property
+    def timeout(self):
+        return self.args.get("timeout")
+
+    @property
     def use_current_controller(self) -> bool:
         return not self.controllers and not self.all_controllers

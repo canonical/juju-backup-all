@@ -104,8 +104,9 @@ class TestGetLeader(unittest.TestCase):
 
 
 class TestCheckOutputUnitAction(unittest.TestCase):
+    @patch("jujubackupall.utils.wait_for")
     @patch("jujubackupall.utils.run_async")
-    def test_check_output_unit_action_success_no_params(self, mock_run_async: Mock):
+    def test_check_output_unit_action_success_no_params(self, mock_run_async: Mock, mock_wait_for: Mock):
         action_name = "my-action"
         safe_data = dict(status="completed")
         mock_unit = Mock()
@@ -118,8 +119,9 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         mock_unit.run_action.assert_called_once_with(action_name)
         mock_action.wait.assert_called_once()
 
+    @patch("jujubackupall.utils.wait_for")
     @patch("jujubackupall.utils.run_async")
-    def test_check_output_unit_action_success_with_params(self, mock_run_async: Mock):
+    def test_check_output_unit_action_success_with_params(self, mock_run_async: Mock, mock_wait_for: Mock):
         action_name = "my-action"
         action_params = dict(param_one="hello", param_two="world")
         safe_data = dict(status="completed")
@@ -133,8 +135,9 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         mock_unit.run_action.assert_called_once_with(action_name, **action_params)
         mock_action.wait.assert_called_once()
 
+    @patch("jujubackupall.utils.wait_for")
     @patch("jujubackupall.utils.run_async")
-    def test_check_output_unit_action_failure(self, mock_run_async: Mock):
+    def test_check_output_unit_action_failure(self, mock_run_async: Mock, mock_wait_for: Mock):
         action_name = "my-action"
         failure_status = "failure"
         failure_results = dict(status=failure_status)
@@ -173,17 +176,19 @@ class TestBackupController(unittest.TestCase):
 
 
 class TestRunWithTimeout(unittest.TestCase):
+    @patch("jujubackupall.utils.globals")
     @patch("jujubackupall.utils.run_async")
     @patch("jujubackupall.utils.wait_for")
-    def test_ran_with_no_timeout(self, mock_wait_for: Mock, mock_run_async: Mock):
+    def test_ran_with_no_timeout(self, mock_wait_for: Mock, mock_run_async: Mock, mock_globals: Mock):
         mock_coroutine = Mock()
         task = "some task"
-        timeout = 60
         expected_result = "my result"
+        timeout = 60
 
+        mock_globals.async_timeout = timeout
         mock_run_async.return_value = expected_result
 
-        actual_result = run_with_timeout(mock_coroutine, task, timeout)
+        actual_result = run_with_timeout(mock_coroutine, task)
 
         mock_wait_for.assert_called_once_with(mock_coroutine, timeout)
         self.assertEqual(actual_result, expected_result)
@@ -193,12 +198,11 @@ class TestRunWithTimeout(unittest.TestCase):
     def test_ran_with_timeout(self, mock_wait_for: Mock, mock_run_async: Mock):
         mock_coroutine = Mock()
         task = "some task"
-        timeout = 60
 
         mock_wait_for.side_effect = TimeoutError()
 
         with self.assertRaises(JujuTimeoutError) as context:
-            run_with_timeout(mock_coroutine, task, timeout)
+            run_with_timeout(mock_coroutine, task)
 
         self.assertIn(task, str(context.exception))
 

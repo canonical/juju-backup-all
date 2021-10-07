@@ -21,6 +21,7 @@ import argparse
 import logging
 import os
 
+from jujubackupall import globals
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
 from jujubackupall.process import BackupProcessor
@@ -36,6 +37,7 @@ class Cli:
     def run(self):
         self._configure_logging()
         self._configure_juju_data()
+        self._configure_global_vars()
         backup_processor = BackupProcessor(self.config)
         backup_processor.process_backups()
 
@@ -51,6 +53,7 @@ class Cli:
             controllers=args.controllers,
             output_dir=args.output_dir,
             log_level=args.log_level,
+            timeout=args.timeout,
         )
         return args_dict
 
@@ -65,6 +68,9 @@ class Cli:
     def _configure_juju_data():
         if os.environ.get("SNAP_REAL_HOME"):
             os.environ["JUJU_DATA"] = "{}/.local/share/juju".format(os.environ.get("SNAP_REAL_HOME"))
+
+    def _configure_global_vars(self):
+        globals.async_timeout = self.config.timeout
 
 
 def make_cli_parser():
@@ -87,6 +93,9 @@ def make_cli_parser():
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="WARNING",
         type=str.upper,
+    )
+    parser.add_argument(
+        "-t", "--timeout", dest="timeout", default=600, help="timeout in seconds for long running commands.", type=int
     )
     return parser
 
