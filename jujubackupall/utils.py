@@ -32,7 +32,8 @@ from juju.machine import Machine
 from juju.model import Model
 from juju.unit import Unit
 
-from jujubackupall.constants import DEFAULT_TIMEOUT, MAX_FRAME_SIZE
+from jujubackupall import globals
+from jujubackupall.constants import MAX_FRAME_SIZE
 from jujubackupall.errors import ActionError, JujuTimeoutError, NoLeaderError
 
 
@@ -135,7 +136,8 @@ def backup_controller(controller: Controller) -> Tuple[Model, dict]:
     return controller_model, controller_backup_results
 
 
-def run_with_timeout(coroutine: Coroutine, task: str, timeout=DEFAULT_TIMEOUT):
+def run_with_timeout(coroutine: Coroutine, task: str):
+    timeout = globals.async_timeout
     try:
         return run_async(wait_for(coroutine, timeout))
     except TimeoutError:
