@@ -1,16 +1,19 @@
 #!/usr/bin/python3
 """ Unit tests for utils.py """
 import unittest
+from concurrent.futures import TimeoutError
 from unittest.mock import Mock, patch
 
-from jujubackupall.errors import ActionError, NoLeaderError
+from jujubackupall.errors import ActionError, JujuTimeoutError, NoLeaderError
 from jujubackupall.utils import (
+    backup_controller,
     check_output_unit_action,
     connect_controller,
     connect_model,
     get_all_controllers,
     get_leader,
     parse_charm_name,
+    run_with_timeout,
 )
 
 
@@ -144,6 +147,60 @@ class TestCheckOutputUnitAction(unittest.TestCase):
             check_output_unit_action(mock_unit, action_name)
         self.assertTrue(failure_status in str(context.exception))
         self.assertTrue(context.exception.results(), failure_results)
+
+
+class TestBackupController(unittest.TestCase):
+    @patch("jujubackupall.utils.run_with_timeout")
+    @patch("jujubackupall.utils.run_async")
+    def test_backup_controller_success(self, mock_run_async: Mock, mock_run_with_timeout: Mock):
+        mock_model = Mock()
+        mock_controller = Mock()
+        expected_dict = dict()
+        controller_name = "my-controller"
+
+        mock_run_async.return_value = mock_model
+        mock_run_with_timeout.return_value = expected_dict
+        mock_controller.controller_name = controller_name
+
+        actual_model, actual_dict = backup_controller(mock_controller)
+
+        mock_controller.get_model.assert_called_once_with("controller")
+        mock_run_with_timeout.assert_called_once_with(
+            mock_model.create_backup(), "controller backup on controller {}".format(controller_name)
+        )
+        self.assertEqual(actual_model, mock_model)
+        self.assertEqual(actual_dict, expected_dict)
+
+
+class TestRunWithTimeout(unittest.TestCase):
+    @patch("jujubackupall.utils.run_async")
+    @patch("jujubackupall.utils.wait_for")
+    def test_ran_with_no_timeout(self, mock_wait_for: Mock, mock_run_async: Mock):
+        mock_coroutine = Mock()
+        task = "some task"
+        timeout = 60
+        expected_result = "my result"
+
+        mock_run_async.return_value = expected_result
+
+        actual_result = run_with_timeout(mock_coroutine, task, timeout)
+
+        mock_wait_for.assert_called_once_with(mock_coroutine, timeout)
+        self.assertEqual(actual_result, expected_result)
+
+    @patch("jujubackupall.utils.run_async")
+    @patch("jujubackupall.utils.wait_for")
+    def test_ran_with_timeout(self, mock_wait_for: Mock, mock_run_async: Mock):
+        mock_coroutine = Mock()
+        task = "some task"
+        timeout = 60
+
+        mock_wait_for.side_effect = TimeoutError()
+
+        with self.assertRaises(JujuTimeoutError) as context:
+            run_with_timeout(mock_coroutine, task, timeout)
+
+        self.assertIn(task, str(context.exception))
 
 
 if __name__ == "__main__":
