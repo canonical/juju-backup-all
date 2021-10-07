@@ -35,7 +35,12 @@ from jujubackupall.backup import (
 )
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
-from jujubackupall.errors import ActionError, JujuControllerBackupError, NoLeaderError
+from jujubackupall.errors import (
+    ActionError,
+    JujuControllerBackupError,
+    JujuTimeoutError,
+    NoLeaderError,
+)
 from jujubackupall.utils import (
     connect_controller,
     connect_model,
@@ -161,7 +166,7 @@ class ControllerProcessor:
             self._log(
                 "Backups downloaded to {}".format(resulting_backup_path), app_name=app_name, model_name=model_name
             )
-        except (ActionError, NoLeaderError, JujuError) as error:
+        except (ActionError, NoLeaderError, JujuError, JujuTimeoutError) as error:
             self._log(
                 "App backup not completed: {}.".format(error),
                 app_name=app_name,

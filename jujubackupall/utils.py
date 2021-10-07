@@ -18,9 +18,11 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides utility functions."""
 import os
+from asyncio import wait_for
+from concurrent.futures import TimeoutError
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import Coroutine, List, Tuple
 
 from juju.action import Action
 from juju.controller import Controller
@@ -30,8 +32,8 @@ from juju.machine import Machine
 from juju.model import Model
 from juju.unit import Unit
 
-from jujubackupall.constants import MAX_FRAME_SIZE
-from jujubackupall.errors import ActionError, NoLeaderError
+from jujubackupall.constants import DEFAULT_TIMEOUT, MAX_FRAME_SIZE
+from jujubackupall.errors import ActionError, JujuTimeoutError, NoLeaderError
 
 
 @contextmanager
@@ -89,28 +91,52 @@ def get_datetime_string() -> str:
 
 def check_output_unit_action(unit: Unit, action_name: str, **params) -> dict:
     backup_action: Action = run_async(unit.run_action(action_name, **params))
-    run_async(backup_action.wait())
+    run_with_timeout(backup_action.wait(), action_name)
     if backup_action.safe_data.get("status") != "completed":
         raise ActionError(backup_action)
     return backup_action.safe_data
 
 
 def ssh_run_on_unit(unit: Unit, command: str, user="ubuntu"):
-    run_async(unit.ssh(command=command, user=user))
+    run_with_timeout(
+        unit.ssh(command=command, user=user),
+        "unit ssh with command={} on unit {}".format(command, unit.safe_data.get("name")),
+    )
 
 
 def ssh_run_on_machine(machine: Machine, command: str, user="ubuntu"):
-    run_async(machine.ssh(command=command, user=user))
+    run_with_timeout(
+        machine.ssh(command=command, user=user),
+        "machine ssh with command={} on machine {}".format(command, machine.safe_data.get("hostname")),
+    )
 
 
 def scp_from_unit(unit: Unit, source: str, destination: str):
-    run_async(unit.scp_from(source=source, destination=destination))
+    run_with_timeout(
+        unit.scp_from(source=source, destination=destination),
+        "unit scp with source={}:{} and destination={}".format(unit.safe_data.get("name"), source, destination),
+    )
 
 
 def scp_from_machine(machine: Machine, source: str, destination: str):
-    run_async(machine.scp_from(source=source, destination=destination))
+    run_with_timeout(
+        machine.scp_from(source=source, destination=destination),
+        "machine scp with source={}:{} and destination={}".format(
+            machine.safe_data.get("hostname"), source, destination
+        ),
+    )
 
 
 def backup_controller(controller: Controller) -> Tuple[Model, dict]:
     controller_model: Model = run_async(controller.get_model("controller"))
-    return controller_model, run_async(controller_model.create_backup())
+    controller_backup_results = run_with_timeout(
+        controller_model.create_backup(), "controller backup on controller {}".format(controller.controller_name)
+    )
+    return controller_model, controller_backup_results
+
+
+def run_with_timeout(coroutine: Coroutine, task: str, timeout=DEFAULT_TIMEOUT):
+    try:
+        return run_async(wait_for(coroutine, timeout))
+    except TimeoutError:
+        raise JujuTimeoutError("Task '{}' timed out (timeout={}).".format(task, timeout))

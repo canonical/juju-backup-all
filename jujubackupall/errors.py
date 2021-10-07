@@ -70,3 +70,13 @@ class NoLeaderError(Exception):
     def __str__(self):
         """Return string representation of NoLeaderError."""
         return "{}: No leader could be found for units: {}".format(self.__class__.__name__, self.units)
+
+
+class JujuTimeoutError(Exception):
+    def __init__(self, message):
+        super().__init__()
+        self.message = message
+
+    def __str__(self):
+        """Return string representation of JujuTimeoutError."""
+        return "{}: {}".format(self.__class__.__name__, self.message)
