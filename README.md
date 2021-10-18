@@ -9,7 +9,28 @@ This Juju plugin allows operators to backup juju controllers as well as the foll
 - [etcd](https://charmhub.io/etcd)
 
 The plugin enumerates through all controllers, backing up the controller and scanning through each model for any
-applications that can be backed up. It then saves these backups
+applications that can be backed up. It then saves these backups.
+
+Find it on the Snap Store!
+
+<a href="https://snapcraft.io/juju-backup-all" title="Get it from the Snap Store">
+    <img src="https://snapcraft.io/static/images/badges/en/snap-store-black.svg" alt="Get it from the Snap Store" width="200" />
+</a>
+
+## Install
+
+Install juju-backup-all from Snap Store with:
+
+```bash
+snap install juju-backup-all
+```
+
+Then, make sure the appropriate interfaces are plugged:
+
+```bash
+snap connect juju-backup-all:juju-client-observe
+snap connect juju-backup-all:ssh-keys
+```
 
 ## Usage
 
@@ -123,7 +144,7 @@ make snap
 You can then install the locally built snap with:
 
 ```bash
-sudo snap install --classic --dangerous ./juju-backup-all_${VERSION}.snap
+sudo snap install --dangerous ./juju-backup-all_${VERSION}.snap
 ```
 
 To clean up the snapcraft build environment, run the following:
