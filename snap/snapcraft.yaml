@@ -9,7 +9,12 @@ description: |
   controllers to backup, and backup local configs.
 
   Supported charms: mysql-innodb-cluster, percona-cluster, etcd
+
   Supported config backups: Juju
+issues: https://bugs.launchpad.net/juju-backup-all
+source-code: https://git.launchpad.net/juju-backup-all
+website: https://launchpad.net/juju-backup-all
+license: Apache-2.0
 confinement: strict
 
 apps:
