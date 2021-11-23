@@ -141,7 +141,7 @@ class TestBackupProcessor(unittest.TestCase):
         backup_processor.process_backups()
         mock_juju_config_backup.assert_called_with(Path(self.mock_config.output_dir))
         mock_juju_config_backup_inst.backup.assert_called_once()
-        mock_tracker.print_report.assert_called_once()
+        mock_tracker.to_json.assert_called_once()
 
 
 class TestControllerProcessor(unittest.TestCase):

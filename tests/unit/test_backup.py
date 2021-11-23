@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 """ Unit tests for backup.py """
-import io
 import json
 import unittest
 from pathlib import Path
@@ -226,10 +225,9 @@ class TestBackupTracker(unittest.TestCase):
     def setUp(self) -> None:
         self.tracker = BackupTracker()
 
-    @patch("sys.stdout", new_callable=io.StringIO)
-    def assert_stdout(self, expected_output, mock_stdout):
-        self.tracker.print_report()
-        self.assertEqual(expected_output, mock_stdout.getvalue().strip())
+    def assert_output(self, expected_output):
+        actual_output = self.tracker.to_json()
+        self.assertEqual(expected_output, actual_output)
 
     @staticmethod
     def generate_expected_output(apps, configs, controllers):
@@ -263,22 +261,22 @@ class TestBackupTracker(unittest.TestCase):
     def test_report_multi_apps(self):
         expected_output = self.generate_expected_output(apps=self.app_backups, controllers=[], configs=[])
         self.add_app_backups_to_tracker(self.app_backups)
-        self.assert_stdout(expected_output)
+        self.assert_output(expected_output)
 
     def test_report_one_app(self):
         expected_output = self.generate_expected_output(apps=self.app_backups[0:1], controllers=[], configs=[])
         self.add_app_backups_to_tracker(self.app_backups[0:1])
-        self.assert_stdout(expected_output)
+        self.assert_output(expected_output)
 
     def test_report_multi_controllers(self):
         expected_output = self.generate_expected_output(apps=[], controllers=self.controller_backups, configs=[])
         self.add_controller_backups_to_tracker(self.controller_backups)
-        self.assert_stdout(expected_output)
+        self.assert_output(expected_output)
 
     def test_multi_configs(self):
         expected_output = self.generate_expected_output(apps=[], controllers=[], configs=self.config_backups)
         self.add_config_backups_to_tracker(self.config_backups)
-        self.assert_stdout(expected_output)
+        self.assert_output(expected_output)
 
     def test_all_no_errors(self):
         expected_output = self.generate_expected_output(
@@ -287,7 +285,7 @@ class TestBackupTracker(unittest.TestCase):
         self.add_app_backups_to_tracker(self.app_backups)
         self.add_config_backups_to_tracker(self.config_backups)
         self.add_controller_backups_to_tracker(self.controller_backups)
-        self.assert_stdout(expected_output)
+        self.assert_output(expected_output)
 
     def test_all_errors(self):
         error_list = [
@@ -300,4 +298,4 @@ class TestBackupTracker(unittest.TestCase):
         )
         for error in error_list:
             self.tracker.add_error(**error)
-        self.assert_stdout(expected_output)
+        self.assert_output(expected_output)

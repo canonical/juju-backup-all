@@ -39,7 +39,8 @@ class Cli:
         self._configure_juju_data()
         self._configure_global_vars()
         backup_processor = BackupProcessor(self.config)
-        backup_processor.process_backups()
+        backup_report = backup_processor.process_backups()
+        print(backup_report)
 
     @staticmethod
     def _parse_args() -> dict:
