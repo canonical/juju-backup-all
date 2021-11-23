@@ -101,7 +101,7 @@ class BackupProcessor:
                 controller_processor.backup_models()
                 if self.config.backup_controller:
                     controller_processor.backup_controller()
-        tracker.print_report()
+        return tracker.to_json()
 
 
 class ControllerProcessor:

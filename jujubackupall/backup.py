@@ -271,8 +271,8 @@ class BackupTracker:
     def add_error(self, **kwargs):
         self.errors.append(kwargs)
 
-    def print_report(self):
-        """Print JSON representation of backups.
+    def to_json(self):
+        """Generate JSON representation of backups.
 
         The output will look something like the following:
         {
@@ -319,7 +319,7 @@ class BackupTracker:
         )
         if self.errors:
             report["errors"] = self.errors
-        print(json.dumps(report, indent=2))
+        return json.dumps(report, indent=2)
 
 
 def get_charm_backup_instance(charm_name: str, unit: Unit) -> CharmBackupType:
