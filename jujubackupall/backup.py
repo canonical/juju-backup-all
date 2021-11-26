@@ -29,7 +29,6 @@ from typing import Dict, List, TypeVar
 
 from juju.controller import Controller
 from juju.errors import JujuAPIError
-from juju.machine import Machine
 from juju.unit import Unit
 
 from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
@@ -39,9 +38,7 @@ from jujubackupall.utils import (
     check_output_unit_action,
     ensure_path_exists,
     get_datetime_string,
-    scp_from_machine,
     scp_from_unit,
-    ssh_run_on_machine,
     ssh_run_on_unit,
 )
 
@@ -161,7 +158,7 @@ class JujuControllerBackup(BaseBackup):
         for i in range(MAX_CONTROLLER_BACKUP_RETRIES):
             try:
                 logger.info("[{}] Attempt #{} for controller backup.".format(self.controller.controller_name, i + 1))
-                controller_model, result_dict = backup_controller(self.controller)
+                local_backup_filename, result_dict = backup_controller(self.controller)
                 break
             except JujuAPIError as juju_api_error:
                 error_msg = "[{}] Attempt #{} Encountered controller backup error: {}".format(
@@ -178,19 +175,14 @@ class JujuControllerBackup(BaseBackup):
             logger.error(error_msg)
             raise JujuControllerBackupError(last_error)
 
-        filepath, machine_id = Path(result_dict.get("filename")), result_dict.get("controller-machine-id")
-        controller_machine: Machine = controller_model.machines.get(machine_id)
-
-        chown_command = "sudo chown -R ubuntu:ubuntu {}".format(filepath.parent)
-        ssh_run_on_machine(machine=controller_machine, command=chown_command)
-
+        # as of libjuju 2.9.4 the library downloads the backup for us, but we cannot
+        # specify the filename/location. It's downloaded to CWD and we only get the
+        # filename. Need to relocate it to the configured save path.
+        # https://github.com/juju/python-libjuju/issues/553
         save_filename = "juju-controller-backup-{}.tar.gz".format(get_datetime_string())
         save_file_path = self.save_path / save_filename
         ensure_path_exists(self.save_path)
-        scp_from_machine(machine=controller_machine, source=str(filepath), destination=str(save_file_path))
-
-        rm_command = "sudo rm -r {}".format(filepath.parent)
-        ssh_run_on_machine(machine=controller_machine, command=rm_command)
+        shutil.move(local_backup_filename, save_file_path.absolute())
 
         return Path(save_file_path).absolute()
 

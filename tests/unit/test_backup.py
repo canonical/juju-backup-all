@@ -52,8 +52,7 @@ class TestJujuControllerBackup(unittest.TestCase):
         }
         return JujuAPIError(error_result)
 
-    @patch("jujubackupall.backup.scp_from_machine")
-    @patch("jujubackupall.backup.ssh_run_on_machine")
+    @patch("shutil.move")
     @patch("jujubackupall.backup.backup_controller")
     @patch("jujubackupall.backup.get_datetime_string")
     @patch("jujubackupall.backup.ensure_path_exists")
@@ -62,24 +61,21 @@ class TestJujuControllerBackup(unittest.TestCase):
         mock_path_exists: Mock,
         mock_get_datetime_string: Mock,
         mock_backup_controller: Mock,
-        mock_ssh: Mock,
-        mock_scp: Mock,
+        mock_shutil_move: Mock,
     ):
         results_dict = {"filename": "myfile", "controller-machine-id": "0"}
-        mock_controller_model = Mock()
-        mock_backup_controller.return_value = (mock_controller_model, results_dict)
+        local_backup_filename = "local_filename"
+        mock_backup_controller.return_value = (local_backup_filename, results_dict)
 
         return_path = self.controller_backup.backup()
 
         mock_backup_controller.assert_called_once_with(self.controller_backup.controller)
-        self.assertEqual(mock_ssh.call_count, 2, "Ensure ssh_run_on_machine was called twice (chown and rm)")
-        mock_scp.assert_called_once()
+        mock_shutil_move.assert_called_once_with(local_backup_filename, return_path)
         mock_path_exists.assert_called_once_with(self.controller_backup.save_path)
         mock_get_datetime_string.assert_called_once()
         self.assertEqual(return_path.parent, self.mock_save_path.absolute())
 
-    @patch("jujubackupall.backup.scp_from_machine")
-    @patch("jujubackupall.backup.ssh_run_on_machine")
+    @patch("shutil.move")
     @patch("jujubackupall.backup.backup_controller")
     @patch("jujubackupall.backup.get_datetime_string")
     @patch("jujubackupall.backup.ensure_path_exists")
@@ -88,12 +84,10 @@ class TestJujuControllerBackup(unittest.TestCase):
         mock_path_exists: Mock,
         mock_get_datetime_string: Mock,
         mock_backup_controller: Mock,
-        mock_ssh: Mock,
-        mock_scp: Mock,
+        mock_shutil_move: Mock,
     ):
         results_dict = {"filename": "myfile", "controller-machine-id": "0"}
-        mock_controller_model = Mock()
-        mock_backup_controller.side_effect = [self.get_juju_api_error(), (mock_controller_model, results_dict)]
+        mock_backup_controller.side_effect = [self.get_juju_api_error(), ("local_filename", results_dict)]
 
         result = self.controller_backup.backup()
 
