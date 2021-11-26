@@ -160,18 +160,19 @@ class TestBackupController(unittest.TestCase):
         mock_controller = Mock()
         expected_dict = dict()
         controller_name = "my-controller"
+        local_backup_filename = "local_filename"
 
         mock_run_async.return_value = mock_model
-        mock_run_with_timeout.return_value = expected_dict
+        mock_run_with_timeout.return_value = (local_backup_filename, expected_dict)
         mock_controller.controller_name = controller_name
 
-        actual_model, actual_dict = backup_controller(mock_controller)
+        actual_filename, actual_dict = backup_controller(mock_controller)
 
         mock_controller.get_model.assert_called_once_with("controller")
         mock_run_with_timeout.assert_called_once_with(
             mock_model.create_backup(), "controller backup on controller {}".format(controller_name)
         )
-        self.assertEqual(actual_model, mock_model)
+        self.assertEqual(actual_filename, local_backup_filename)
         self.assertEqual(actual_dict, expected_dict)
 
 

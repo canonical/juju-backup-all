@@ -130,10 +130,9 @@ def scp_from_machine(machine: Machine, source: str, destination: str):
 
 def backup_controller(controller: Controller) -> Tuple[Model, dict]:
     controller_model: Model = run_async(controller.get_model("controller"))
-    controller_backup_results = run_with_timeout(
+    return run_with_timeout(
         controller_model.create_backup(), "controller backup on controller {}".format(controller.controller_name)
     )
-    return controller_model, controller_backup_results
 
 
 def run_with_timeout(coroutine: Coroutine, task: str):
