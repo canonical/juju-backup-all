@@ -145,7 +145,7 @@ class TestBackupProcessor(unittest.TestCase):
 
 
 class TestControllerProcessor(unittest.TestCase):
-    @patch("jujubackupall.process.Controller")
+    @patch("jujubackupall.process.Controller", controller_name="test-controller")
     def setUp(self, mock_controller) -> None:
         self.mock_controller = mock_controller
         self.base_output_path = Path("juju-backups")

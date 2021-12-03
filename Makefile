@@ -18,7 +18,7 @@ functional:
 
 unit:
 		@echo Executing unit tests with coverage reports
-		@tox -e unit
+		@tox -e 'py3{6,8}'-unit
 
 unit-coverage: unit
 		@echo Generating html unit test coverage report

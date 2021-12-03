@@ -194,6 +194,7 @@ class TestRunWithTimeout(unittest.TestCase):
         mock_wait_for.assert_called_once_with(mock_coroutine, timeout)
         self.assertEqual(actual_result, expected_result)
 
+    @unittest.skip("reason: LP#1951914")
     @patch("jujubackupall.utils.run_async")
     @patch("jujubackupall.utils.wait_for")
     def test_ran_with_timeout(self, mock_wait_for: Mock, mock_run_async: Mock):

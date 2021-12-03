@@ -17,16 +17,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides the backup classes for the various charms."""
-import dataclasses
 import json
 import os
 import shutil
 from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
 from typing import Dict, List, TypeVar
 
+import attr
 from juju.controller import Controller
 from juju.errors import JujuAPIError
 from juju.unit import Unit
@@ -216,25 +215,25 @@ class JujuClientConfigBackup(ClientConfigBackup):
             self.client_config_location = Path(os.environ.get("JUJU_DATA"))
 
 
-@dataclass
+@attr.s
 class AppBackupEntry:
-    controller: str
-    model: str
-    charm: str
-    app: str
-    download_path: str
+    controller: str = attr.ib(validator=attr.validators.instance_of(str))
+    model: str = attr.ib(validator=attr.validators.instance_of(str))
+    charm: str = attr.ib(validator=attr.validators.instance_of(str))
+    app: str = attr.ib(validator=attr.validators.instance_of(str))
+    download_path: str = attr.ib(validator=attr.validators.instance_of(str))
 
 
-@dataclass
+@attr.s
 class ConfigBackupEntry:
-    config: str
-    download_path: str
+    config: str = attr.ib(validator=attr.validators.instance_of(str))
+    download_path: str = attr.ib(validator=attr.validators.instance_of(str))
 
 
-@dataclass
+@attr.s
 class ControllerBackupEntry:
-    controller: str
-    download_path: str
+    controller: str = attr.ib(validator=attr.validators.instance_of(str))
+    download_path: str = attr.ib(validator=attr.validators.instance_of(str))
 
 
 class BackupTracker:
@@ -305,9 +304,9 @@ class BackupTracker:
         }
         """
         report = dict(
-            controller_backups=[dataclasses.asdict(x) for x in self.controller_backups],
-            config_backups=[dataclasses.asdict(x) for x in self.config_backups],
-            app_backups=[dataclasses.asdict(x) for x in self.app_backups],
+            controller_backups=[attr.asdict(x) for x in self.controller_backups],
+            config_backups=[attr.asdict(x) for x in self.config_backups],
+            app_backups=[attr.asdict(x) for x in self.app_backups],
         )
         if self.errors:
             report["errors"] = self.errors

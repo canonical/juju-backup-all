@@ -121,6 +121,9 @@ that model instead of deploying another one.
 
 ### Unit tests
 
+The unit tests run for two different versions of python - 3.6 (Ubuntu Bionic) and 3.8 (Ubuntu Focal), they will have to be available
+to run the unit tests.
+
 To run unit tests:
 
 ```bash
