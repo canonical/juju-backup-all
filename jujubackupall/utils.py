@@ -18,8 +18,8 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides utility functions."""
 import os
-from asyncio import wait_for
-from concurrent.futures import TimeoutError
+from asyncio import wait_for, TimeoutError as AIOTimeoutError
+from concurrent.futures import TimeoutError as CFTimeoutError
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Coroutine, List, Tuple
@@ -139,5 +139,5 @@ def run_with_timeout(coroutine: Coroutine, task: str):
     timeout = globals.async_timeout
     try:
         return run_async(wait_for(coroutine, timeout))
-    except TimeoutError:
+    except (AIOTimeoutError, CFTimeoutError):
         raise JujuTimeoutError("Task '{}' timed out (timeout={}).".format(task, timeout))
