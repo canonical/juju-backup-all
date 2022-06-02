@@ -98,6 +98,55 @@ def check_output_unit_action(unit: Unit, action_name: str, **params) -> dict:
     return backup_action.safe_data
 
 
+def _fake_machine_public_address(machine):
+    """copy local-fan address as fake public address when necessary.
+
+    In libjuju[0], machine.dns_name will look for `public` or `local-cloud` address.
+    For lxd, neither exists, it will return None and cause ssh/scp functions fail.[1]
+
+    Example addresses data for lxd:
+
+        "addresses": [
+            {
+                "value": "252.152.11.61",
+                "type": "ipv4",
+                "scope": "local-fan"
+            },
+            {
+                "value": "127.0.0.1",
+                "type": "ipv4",
+                "scope": "local-machine"
+            },
+            {
+                "value": "::1",
+                "type": "ipv6",
+                "scope": "local-machine"
+            }
+        ],
+
+    This function detect such situation, and use `local-fan` address as public address,
+    so machine.dns_name can still get a valid address.
+
+    [0]: https://github.com/juju/python-libjuju/blob/master/juju/machine.py#L231
+    [1]: https://github.com/juju/python-libjuju/issues/611
+    """
+    # a reference to the address list, will change value in place
+    addresses = machine.safe_data['addresses']
+
+    local_fan_addr = None
+    for address in addresses:
+        scope = address['scope']
+        if scope in ("public", "local-cloud"):
+            return  # no issue, nothing needed
+        if scope == "local-fan":
+            local_fan_addr = address
+
+    if local_fan_addr:
+        public_addr = local_fan_addr.copy()
+        public_addr["scope"] = "public"
+        addresses.insert(0, public_addr)
+
+
 def ssh_run_on_unit(unit: Unit, command: str, user="ubuntu"):
     run_with_timeout(
         unit.ssh(command=command, user=user),
@@ -113,6 +162,7 @@ def ssh_run_on_machine(machine: Machine, command: str, user="ubuntu"):
 
 
 def scp_from_unit(unit: Unit, source: str, destination: str):
+    _fake_machine_public_address(unit.machine)
     run_with_timeout(
         unit.scp_from(source=source, destination=destination),
         "unit scp with source={}:{} and destination={}".format(unit.safe_data.get("name"), source, destination),
@@ -120,6 +170,7 @@ def scp_from_unit(unit: Unit, source: str, destination: str):
 
 
 def scp_from_machine(machine: Machine, source: str, destination: str):
+    _fake_machine_public_address(machine)
     run_with_timeout(
         machine.scp_from(source=source, destination=destination),
         "machine scp with source={}:{} and destination={}".format(
