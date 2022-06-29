@@ -86,7 +86,7 @@ class BackupProcessor:
             self._controller_names = [""]
         return self._controller_names
 
-    def process_backups(self):
+    def process_backups(self, omit_models=None):
         if self.config.backup_juju_client_config:
             config_backup_dir_path = Path(self.config.output_dir)
             backup_juju_client_config_inst = JujuClientConfigBackup(config_backup_dir_path)
@@ -98,7 +98,7 @@ class BackupProcessor:
                 controller_processor = ControllerProcessor(
                     controller, self.apps_to_backup, Path(self.config.output_dir)
                 )
-                controller_processor.backup_models()
+                controller_processor.backup_models(omit_models=omit_models)
                 if self.config.backup_controller:
                     controller_processor.backup_controller()
         return tracker.to_json()
@@ -131,8 +131,9 @@ class ControllerProcessor:
                 error_reason=str(controller_backup_error),
             )
 
-    def backup_models(self):
+    def backup_models(self, omit_models=None):
         model_names: List[str] = run_async(self.controller.list_models())
+        model_names = set(model_names) - set(omit_models or [])
         self._log("Models to process {}".format(model_names))
         for model_name in model_names:
             with connect_model(self.controller, model_name) as model:
