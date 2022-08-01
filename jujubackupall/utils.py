@@ -18,7 +18,8 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides utility functions."""
 import os
-from asyncio import wait_for, TimeoutError as AIOTimeoutError
+from asyncio import TimeoutError as AIOTimeoutError
+from asyncio import wait_for
 from concurrent.futures import TimeoutError as CFTimeoutError
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -99,7 +100,7 @@ def check_output_unit_action(unit: Unit, action_name: str, **params) -> dict:
 
 
 def _fake_machine_public_address(machine):
-    """copy local-fan address as fake public address when necessary.
+    """Copy local-fan address as fake public address when necessary.
 
     In libjuju[0], machine.dns_name will look for `public` or `local-cloud` address.
     For lxd, neither exists, it will return None and cause ssh/scp functions fail.[1]
@@ -131,11 +132,11 @@ def _fake_machine_public_address(machine):
     [1]: https://github.com/juju/python-libjuju/issues/611
     """
     # a reference to the address list, will change value in place
-    addresses = machine.safe_data['addresses']
+    addresses = machine.safe_data["addresses"]
 
     local_fan_addr = None
     for address in addresses:
-        scope = address['scope']
+        scope = address["scope"]
         if scope in ("public", "local-cloud"):
             return  # no issue, nothing needed
         if scope == "local-fan":

@@ -21,4 +21,4 @@
 SUPPORTED_BACKUP_CHARMS = ["mysql-innodb-cluster", "percona-cluster", "etcd"]
 MAX_CONTROLLER_BACKUP_RETRIES = 3
 # NOTE: Workaround for https://github.com/juju/python-libjuju/issues/523
-MAX_FRAME_SIZE = 2 ** 64
+MAX_FRAME_SIZE = 2**64
