@@ -71,7 +71,7 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
     def download_backup(self, save_path: Path) -> Path:
         ensure_path_exists(path=save_path)
         scp_from_unit(unit=self.unit, source=str(self.backup_filepath), destination=str(save_path))
-        rm_command = "sudo rm -r {}".format(self.backup_filepath)
+        rm_command = "sudo rm {}".format(self.backup_filepath)
         ssh_run_on_unit(unit=self.unit, command=rm_command)
         return (save_path / self.backup_filepath.name).absolute()
 
