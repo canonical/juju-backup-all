@@ -28,12 +28,12 @@ from typing import Coroutine, List, Tuple
 from juju.action import Action
 from juju.controller import Controller
 from juju.juju import Juju
-from juju.loop import run as run_async
 from juju.machine import Machine
 from juju.model import Model
 from juju.unit import Unit
 
 from jujubackupall import globals
+from jujubackupall.async_handlers import run_async
 from jujubackupall.constants import MAX_FRAME_SIZE
 from jujubackupall.errors import ActionError, JujuTimeoutError, NoLeaderError
 

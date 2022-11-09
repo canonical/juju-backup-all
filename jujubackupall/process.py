@@ -24,9 +24,9 @@ from typing import List, NamedTuple
 from juju.application import Application
 from juju.controller import Controller
 from juju.errors import JujuError
-from juju.loop import run as run_async
 from juju.model import Model
 
+from jujubackupall.async_handlers import run_async
 from jujubackupall.backup import (
     BackupTracker,
     JujuClientConfigBackup,

@@ -16,9 +16,9 @@ functional:
 		@echo Using JUJU_DATA=$(JUJU_DATA)
 		@$(FUNCTEST_VARS) tox -e functional
 
-unit:
+unittests:
 		@echo Executing unit tests with coverage reports
-		@tox -e 'py3{6,8}'-unit
+		@tox -e unit
 
 unit-coverage: unit
 		@echo Generating html unit test coverage report

@@ -9,10 +9,11 @@ from conftest import JujuModel
 from juju.application import Application
 from juju.controller import Controller
 
-pytestmark = [pytest.mark.asyncio]
 
-
-async def test_sanity_deployment(mysql_innodb_app: Application, percona_cluster_app: Application):
+async def test_sanity_deployment(
+    mysql_innodb_app: Application, percona_cluster_app: Application, etcd_app: Application
+):
+    assert etcd_app.status == "active"
     assert mysql_innodb_app.status == "active"
     assert percona_cluster_app.status == "active"
 

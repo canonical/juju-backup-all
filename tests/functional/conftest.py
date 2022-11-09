@@ -78,7 +78,7 @@ async def mysql_innodb_app(mysql_innodb_model):
     if mysql_innodb_app:
         return mysql_innodb_app
     mysql_innodb_app = await model.deploy(
-        "cs:mysql-innodb-cluster", application_name="mysql", series="focal", channel="stable", num_units=3
+        "ch:mysql-innodb-cluster", application_name="mysql", series="focal", channel="stable", num_units=3
     )
     await model.block_until(lambda: mysql_innodb_app.status == "active")
     return mysql_innodb_app
@@ -91,7 +91,7 @@ async def percona_cluster_app(percona_cluster_model: JujuModel):
     if percona_cluster_app:
         return percona_cluster_app
     percona_cluster_app = await model.deploy(
-        "cs:percona-cluster", application_name="percona-cluster", series="bionic", channel="stable", num_units=1
+        "ch:percona-cluster", application_name="percona-cluster", series="bionic", channel="stable", num_units=1
     )
     await model.block_until(lambda: percona_cluster_app.status == "active")
     return percona_cluster_app
@@ -103,12 +103,13 @@ async def etcd_app(etcd_model):
     etcd_app: Application = model.applications.get("etcd")
     easyrsa_app: Application = model.applications.get("easyrsa")
     if not etcd_app:
-        etcd_app = await model.deploy("cs:etcd", application_name="etcd", series="focal", channel="stable", num_units=1)
+        etcd_app = await model.deploy("ch:etcd", application_name="etcd", series="focal", channel="stable", num_units=1)
     if not easyrsa_app:
-        await model.deploy(
-            "cs:~containers/easyrsa", application_name="easyrsa", series="focal", channel="stable", num_units=1
+        easyrsa_app = await model.deploy(
+            "ch:easyrsa", application_name="easyrsa", series="focal", channel="stable", num_units=1
         )
     await etcd_app.add_relation("certificates", "easyrsa:client")
+    await model.block_until(lambda: easyrsa_app.status == "active")
     await model.block_until(lambda: etcd_app.status == "active")
     return etcd_app
 
