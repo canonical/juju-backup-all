@@ -21,6 +21,7 @@ import json
 import os
 import shutil
 from abc import ABCMeta, abstractmethod
+from datetime import datetime
 from logging import getLogger
 from pathlib import Path
 from typing import Dict, List, TypeVar
@@ -119,12 +120,13 @@ class EtcdBackup(CharmBackup):
 
 class PostgresqlBackup(CharmBackup):
     charm_name = "postgresql"
+    date_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
+    pgdump_filename = f"pgdump-all-databases-{date_suffix}"
+    backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {pgdump_filename}.gz"
 
     def backup(self):
-        pass
-
-    def download_backup(self, save_path: Path):
-        pass
+        ssh_run_on_unit(unit=self.unit, command=self.backup_cmd)
+        self.backup_filepath = Path(f"/home/ubuntu/{self.pgdump_filename}.gz")
 
 
 class SwiftBackup(CharmBackup):

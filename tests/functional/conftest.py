@@ -52,6 +52,16 @@ async def mysql_innodb_model(controller):
 
 
 @pytest.fixture(scope="session", autouse=True)
+async def postgresql_model(controller):
+    """Return the PostgreSQL model for the test."""
+    juju_model = await _get_or_create_model(controller, app_name="postgresql", env_var="PYTEST_POSTGRESQL_MODEL")
+    yield juju_model
+    await juju_model.model.disconnect()
+    if not os.getenv("PYTEST_KEEP_MODELS"):
+        await _cleanup_model(controller, juju_model.model_name)
+
+
+@pytest.fixture(scope="session", autouse=True)
 async def percona_cluster_model(controller):
     """Return the percona-cluster model for the test."""
     juju_model = await _get_or_create_model(controller, app_name="percona-cluster", env_var="PYTEST_PERCONA_MODEL")
@@ -82,6 +92,19 @@ async def mysql_innodb_app(mysql_innodb_model):
     )
     await model.block_until(lambda: mysql_innodb_app.status == "active")
     return mysql_innodb_app
+
+
+@pytest.fixture(scope="module")
+async def postgresql_app(postgresql_model):
+    model = postgresql_model.model
+    postgresql_app = model.applications.get("postgresql")
+    if postgresql_app:
+        return postgresql_app
+    postgresql_app = await model.deploy(
+        "ch:postgresql", application_name="postgresql", series="focal", channel="stable", num_units=1
+    )
+    await model.block_until(lambda: postgresql_app.status == "active")
+    return postgresql_app
 
 
 @pytest.fixture(scope="module")

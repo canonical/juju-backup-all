@@ -18,7 +18,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Contains constants used throughout the package."""
 
-SUPPORTED_BACKUP_CHARMS = ["mysql-innodb-cluster", "percona-cluster", "etcd"]
+SUPPORTED_BACKUP_CHARMS = ["mysql-innodb-cluster", "percona-cluster", "etcd", "postgresql"]
 MAX_CONTROLLER_BACKUP_RETRIES = 3
 # NOTE: Workaround for https://github.com/juju/python-libjuju/issues/523
 MAX_FRAME_SIZE = 2**64

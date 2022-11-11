@@ -200,6 +200,15 @@ class TestEtcdBackup(unittest.TestCase):
         self.assertEqual(etcd_backup_inst.backup_filepath, Path(expected_path_string))
 
 
+class TestPostgresqlBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.ssh_run_on_unit")
+    def test_postgresql_backup(self, mock_ssh_run_on_unit: Mock):
+        mock_unit = Mock()
+        postgresql_backup_inst = PostgresqlBackup(mock_unit)
+        postgresql_backup_inst.backup()
+        mock_ssh_run_on_unit.assert_called_once()
+
+
 class TestBackupTracker(unittest.TestCase):
     app_backups = [
         dict(controller="controller1", model="model1", charm="charm1", app="app1", download_path="mypath1"),
