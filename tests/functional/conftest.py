@@ -42,99 +42,126 @@ async def controller():
 
 
 @pytest.fixture(scope="session", autouse=True)
-async def mysql_innodb_model(controller):
-    """Return the MYSQL model for the test."""
-    juju_model = await _get_or_create_model(controller, app_name="mysql", env_var="PYTEST_MYSQL_MODEL")
-    yield juju_model
-    await juju_model.model.disconnect()
-    if not os.getenv("PYTEST_KEEP_MODELS"):
-        await _cleanup_model(controller, juju_model.model_name)
+async def models(controller):
+    """Create all models and deploy each app in its respective model.
 
+    Returns a dict containing all the models.
 
-@pytest.fixture(scope="session", autouse=True)
-async def postgresql_model(controller):
-    """Return the PostgreSQL model for the test."""
-    juju_model = await _get_or_create_model(controller, app_name="postgresql", env_var="PYTEST_POSTGRESQL_MODEL")
-    yield juju_model
-    await juju_model.model.disconnect()
-    if not os.getenv("PYTEST_KEEP_MODELS"):
-        await _cleanup_model(controller, juju_model.model_name)
+    This fixture is used in order to setup the models and applications
+    in a concurrent manner at the start of the test session.
 
+    Otherwise, if the setup for each model/application happens one after
+    the other, it would take a long time and result in a timeout error.
 
-@pytest.fixture(scope="session", autouse=True)
-async def percona_cluster_model(controller):
-    """Return the percona-cluster model for the test."""
-    juju_model = await _get_or_create_model(controller, app_name="percona-cluster", env_var="PYTEST_PERCONA_MODEL")
-    yield juju_model
-    await juju_model.model.disconnect()
-    if not os.getenv("PYTEST_KEEP_MODELS"):
-        await _cleanup_model(controller, juju_model.model_name)
-
-
-@pytest.fixture(scope="session", autouse=True)
-async def etcd_model(controller):
-    """Return the etcd model for the test."""
-    juju_model = await _get_or_create_model(controller, app_name="etcd", env_var="PYTEST_ETCD_MODEL")
-    yield juju_model
-    await juju_model.model.disconnect()
-    if not os.getenv("PYTEST_KEEP_MODELS"):
-        await _cleanup_model(controller, juju_model.model_name)
-
-
-@pytest.fixture(scope="module")
-async def mysql_innodb_app(mysql_innodb_model):
-    model = mysql_innodb_model.model
-    mysql_innodb_app = model.applications.get("mysql")
-    if mysql_innodb_app:
-        return mysql_innodb_app
-    mysql_innodb_app = await model.deploy(
-        "ch:mysql-innodb-cluster", application_name="mysql", series="focal", channel="stable", num_units=3
+    Therefore, the code for each application containing `model.block_until()`
+    statements are separated out so that when the deployment for one
+    model/application occurs, it doesn't block the deployment of the other
+    ones.
+    """
+    # create models for each application
+    mysql_innodb_model = await _get_or_create_model(controller, app_name="mysql", env_var="PYTEST_MYSQL_MODEL")
+    postgresql_model = await _get_or_create_model(controller, app_name="postgresql", env_var="PYTEST_POSTGRESQL_MODEL")
+    percona_cluster_model = await _get_or_create_model(
+        controller, app_name="percona-cluster", env_var="PYTEST_PERCONA_MODEL"
     )
-    await model.block_until(lambda: mysql_innodb_app.status == "active")
-    return mysql_innodb_app
+    etcd_model = await _get_or_create_model(controller, app_name="etcd", env_var="PYTEST_ETCD_MODEL")
 
+    models = {
+        "mysql": mysql_innodb_model,
+        "postgresql": postgresql_model,
+        "percona-cluster": percona_cluster_model,
+        "etcd": etcd_model,
+    }
 
-@pytest.fixture(scope="module")
-async def postgresql_app(postgresql_model):
-    model = postgresql_model.model
-    postgresql_app = model.applications.get("postgresql")
-    if postgresql_app:
-        return postgresql_app
-    postgresql_app = await model.deploy(
-        "ch:postgresql", application_name="postgresql", series="focal", channel="stable", num_units=1
-    )
-    await model.block_until(lambda: postgresql_app.status == "active")
-    return postgresql_app
+    # try to fetch apps from their models
+    mysql_innodb_app = models["mysql"].model.applications.get("mysql")
+    postgresql_app = models["postgresql"].model.applications.get("postgresql")
+    etcd_app = models["etcd"].model.applications.get("etcd")
+    easyrsa_app = models["etcd"].model.applications.get("easyrsa")
+    percona_cluster_app = models["percona-cluster"].model.applications.get("percona-cluster")
 
-
-@pytest.fixture(scope="module")
-async def percona_cluster_app(percona_cluster_model: JujuModel):
-    model = percona_cluster_model.model
-    percona_cluster_app = model.applications.get("percona-cluster")
-    if percona_cluster_app:
-        return percona_cluster_app
-    percona_cluster_app = await model.deploy(
-        "ch:percona-cluster", application_name="percona-cluster", series="bionic", channel="stable", num_units=1
-    )
-    await model.block_until(lambda: percona_cluster_app.status == "active")
-    return percona_cluster_app
-
-
-@pytest.fixture(scope="module")
-async def etcd_app(etcd_model):
-    model = etcd_model.model
-    etcd_app: Application = model.applications.get("etcd")
-    easyrsa_app: Application = model.applications.get("easyrsa")
+    # deploy apps if they haven't been deployed previously
+    if not mysql_innodb_app:
+        await models["mysql"].model.deploy(
+            "ch:mysql-innodb-cluster", application_name="mysql", series="focal", channel="stable", num_units=3
+        )
+    if not postgresql_app:
+        await models["postgresql"].model.deploy(
+            "ch:postgresql", application_name="postgresql", series="jammy", channel="stable", num_units=1
+        )
+    if not percona_cluster_app:
+        await models["percona-cluster"].model.deploy(
+            "ch:percona-cluster", application_name="percona-cluster", series="bionic", channel="stable", num_units=1
+        )
     if not etcd_app:
-        etcd_app = await model.deploy("ch:etcd", application_name="etcd", series="focal", channel="stable", num_units=1)
+        await models["etcd"].model.deploy(
+            "ch:etcd", application_name="etcd", series="focal", channel="stable", num_units=1
+        )
     if not easyrsa_app:
-        easyrsa_app = await model.deploy(
+        await models["etcd"].model.deploy(
             "ch:easyrsa", application_name="easyrsa", series="focal", channel="stable", num_units=1
         )
+
+    # return dict of all models
+    yield models
+
+    # cleanup
+    for current_model in models.values():
+        await current_model.model.disconnect()
+    if not os.getenv("PYTEST_KEEP_MODELS"):
+        for model in models.values():
+            await _cleanup_model(controller, model.model_name)
+
+
+@pytest.fixture
+async def mysql_innodb_model(models):
+    """
+    Return the mysql innodb model. Also block execution until
+    the mysql unit is active.
+    """
+    model = models["mysql"].model
+    mysql_innodb_app = model.applications.get("mysql")
+    await model.block_until(lambda: mysql_innodb_app.status == "active")
+    return models["mysql"]
+
+
+@pytest.fixture
+async def postgresql_model(models):
+    """
+    Return the postgresql model. Also block execution until
+    the postgresql unit is active.
+    """
+    model = models["postgresql"].model
+    postgresql_app = model.applications.get("postgresql")
+    await model.block_until(lambda: postgresql_app.status == "active")
+    return models["postgresql"]
+
+
+@pytest.fixture
+async def percona_cluster_model(models):
+    """
+    Return the percona-cluster model. Also block execution until
+    the percona-cluster unit is active.
+    """
+    model = models["percona-cluster"].model
+    percona_cluster_app = model.applications.get("percona-cluster")
+    await model.block_until(lambda: percona_cluster_app.status == "active")
+    return models["percona-cluster"]
+
+
+@pytest.fixture
+async def etcd_model(models):
+    """
+    Return the etcd model. Also block execution until
+    the etcd and easyrsa units are active.
+    """
+    model = models["etcd"].model
+    etcd_app = model.applications.get("etcd")
+    easyrsa_app = model.applications.get("easyrsa")
     await etcd_app.add_relation("certificates", "easyrsa:client")
-    await model.block_until(lambda: easyrsa_app.status == "active")
     await model.block_until(lambda: etcd_app.status == "active")
-    return etcd_app
+    await model.block_until(lambda: easyrsa_app.status == "active")
+    return models["etcd"]
 
 
 async def _get_or_create_model(controller, env_var, app_name):

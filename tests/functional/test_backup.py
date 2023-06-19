@@ -10,20 +10,10 @@ from juju.application import Application
 from juju.controller import Controller
 
 
-async def test_sanity_deployment(
-    mysql_innodb_app: Application, postgresql_app: Application, percona_cluster_app: Application, etcd_app: Application
-):
-    assert mysql_innodb_app.status == "active"
-    assert postgresql_app.status == "active"
-    assert percona_cluster_app.status == "active"
-    assert etcd_app.status == "active"
-
-
-async def test_mysql_innodb_backup(
-    mysql_innodb_model: JujuModel, tmp_path: Path, controller: Controller, mysql_innodb_app: Application
-):
+async def test_mysql_innodb_backup(mysql_innodb_model: JujuModel, tmp_path: Path, controller: Controller):
     model_name = mysql_innodb_model.model_name
     controller_name = controller.controller_name
+    mysql_innodb_app = mysql_innodb_model.model.applications.get("mysql")
     mysql_innodb_app_name = "mysql"
     output = subprocess.check_output(
         "juju-backup-all -o {} -e percona-cluster -e etcd -e postgresql -x -j".format(tmp_path), shell=True
@@ -39,11 +29,10 @@ async def test_mysql_innodb_backup(
     assert glob.glob(str(expected_output_dir) + "/mysqldump-all-databases*.gz")
 
 
-async def test_postgresql_backup(
-    postgresql_model: JujuModel, tmp_path: Path, controller: Controller, postgresql_app: Application
-):
+async def test_postgresql_backup(postgresql_model: JujuModel, tmp_path: Path, controller: Controller):
     model_name = postgresql_model.model_name
     controller_name = controller.controller_name
+    postgresql_app = postgresql_model.model.applications.get("postgresql")
     postgresql_app_name = "postgresql"
     output = subprocess.check_output(
         "juju-backup-all -o {} -e percona-cluster -e etcd -e mysql-innodb-cluster -x -j".format(tmp_path), shell=True
@@ -59,11 +48,10 @@ async def test_postgresql_backup(
     assert glob.glob(str(expected_output_dir) + "/pgdump-all-databases*.gz")
 
 
-async def test_percona_backup(
-    percona_cluster_model: JujuModel, tmp_path: Path, controller: Controller, percona_cluster_app: Application
-):
+async def test_percona_backup(percona_cluster_model: JujuModel, tmp_path: Path, controller: Controller):
     model_name = percona_cluster_model.model_name
     controller_name = controller.controller_name
+    percona_cluster_app = percona_cluster_model.model.applications.get("percona-cluster")
     percona_app_name = "percona-cluster"
     output = subprocess.check_output(
         "juju-backup-all -o {} -e etcd -e mysql-innodb-cluster -e postgresql -x -j".format(tmp_path), shell=True
@@ -107,9 +95,10 @@ async def test_juju_client_config_backup(tmp_path: Path):
     assert glob.glob(str(expected_output_dir) + "/juju-*.gz")
 
 
-async def test_etcd_backup(etcd_model: JujuModel, etcd_app: Application, tmp_path: Path, controller: Controller):
+async def test_etcd_backup(etcd_model: JujuModel, tmp_path: Path, controller: Controller):
     model_name = etcd_model.model_name
     controller_name = controller.controller_name
+    etcd_app: Application = etcd_model.model.applications.get("etcd")
     etcd_app_name = "etcd"
     output = subprocess.check_output(
         "juju-backup-all -o {} -e percona-cluster -e mysql-innodb-cluster -e postgresql -x -j".format(tmp_path),
