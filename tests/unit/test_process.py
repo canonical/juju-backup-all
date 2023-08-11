@@ -227,7 +227,7 @@ class TestControllerProcessor(unittest.TestCase):
     ):
         model_name = "my-model"
         mock_model = Mock()
-        apps = [self.create_app_tuple(app_name) for app_name in ["mysql-innodb-cluster", "percona-cluster", "my-app"]]
+        apps = [self.create_app_tuple(app_name) for app_name in ["mysql-innodb-cluster", "my-app"]]
         apps_dict = dict()
         for app_name, app in apps:
             apps_dict[app_name] = app
@@ -239,11 +239,10 @@ class TestControllerProcessor(unittest.TestCase):
 
         calls_get_backup_instance = [
             call(charm_name="mysql-innodb-cluster", unit=ANY),
-            call(charm_name="percona-cluster", unit=ANY),
         ]
         mock_get_backup_instance.assert_has_calls(calls_get_backup_instance, any_order=True)
         mock_generate_full_backup_path.assert_called()
-        self.assertEqual(mock_get_leader.call_count, 2, "assert get_leader called twice (for the 2 charms in scope)")
+        self.assertEqual(mock_get_leader.call_count, 1, "assert get_leader called once (for the 1 charm in scope)")
 
     @patch("jujubackupall.process.get_leader")
     @patch("jujubackupall.process.get_charm_backup_instance")

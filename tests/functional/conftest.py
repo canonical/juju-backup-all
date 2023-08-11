@@ -61,15 +61,11 @@ async def models(controller):
     # create models for each application
     mysql_innodb_model = await _get_or_create_model(controller, app_name="mysql", env_var="PYTEST_MYSQL_MODEL")
     postgresql_model = await _get_or_create_model(controller, app_name="postgresql", env_var="PYTEST_POSTGRESQL_MODEL")
-    percona_cluster_model = await _get_or_create_model(
-        controller, app_name="percona-cluster", env_var="PYTEST_PERCONA_MODEL"
-    )
     etcd_model = await _get_or_create_model(controller, app_name="etcd", env_var="PYTEST_ETCD_MODEL")
 
     models = {
         "mysql": mysql_innodb_model,
         "postgresql": postgresql_model,
-        "percona-cluster": percona_cluster_model,
         "etcd": etcd_model,
     }
 
@@ -78,7 +74,6 @@ async def models(controller):
     postgresql_app = models["postgresql"].model.applications.get("postgresql")
     etcd_app = models["etcd"].model.applications.get("etcd")
     easyrsa_app = models["etcd"].model.applications.get("easyrsa")
-    percona_cluster_app = models["percona-cluster"].model.applications.get("percona-cluster")
 
     # deploy apps if they haven't been deployed previously
     if not mysql_innodb_app:
@@ -88,10 +83,6 @@ async def models(controller):
     if not postgresql_app:
         await models["postgresql"].model.deploy(
             "ch:postgresql", application_name="postgresql", series="jammy", channel="stable", num_units=1
-        )
-    if not percona_cluster_app:
-        await models["percona-cluster"].model.deploy(
-            "ch:percona-cluster", application_name="percona-cluster", series="bionic", channel="stable", num_units=1
         )
     if not etcd_app:
         await models["etcd"].model.deploy(
@@ -135,18 +126,6 @@ async def postgresql_model(models):
     postgresql_app = model.applications.get("postgresql")
     await model.block_until(lambda: postgresql_app.status == "active")
     return models["postgresql"]
-
-
-@pytest.fixture
-async def percona_cluster_model(models):
-    """
-    Return the percona-cluster model. Also block execution until
-    the percona-cluster unit is active.
-    """
-    model = models["percona-cluster"].model
-    percona_cluster_app = model.applications.get("percona-cluster")
-    await model.block_until(lambda: percona_cluster_app.status == "active")
-    return models["percona-cluster"]
 
 
 @pytest.fixture

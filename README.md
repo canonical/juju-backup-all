@@ -4,7 +4,6 @@
 
 This Juju plugin allows operators to backup juju controllers as well as the following charms:
 - [MySQL Innodb Cluster](https://charmhub.io/mysql-innodb-cluster)
-- [Percona Cluster](https://charmhub.io/percona-cluster)
 - [PostgreSQL](https://charmhub.io/postgresql)
 - [etcd](https://charmhub.io/etcd)
 
@@ -68,12 +67,7 @@ juju-backups/
 ├── controller1/
 │   ├── model1/
 │   │   ├── mysql-innodb-cluster/
-│   │   │   └── mysqldump.tar.gz
-│   │   └── percona-cluster-app/
-│   │       └── mysqldump.tar.gz
-│   └── model2/
-│       └── percona-cluster-app/
-│           └── mysqldump.tar.gz
+│          └── mysqldump.tar.gz
 └── controller2/
     └── model1/
         └── etcd-app/
@@ -111,7 +105,7 @@ These include:
 
 - `PYTEST_KEEP_MODELS`: keeps the models after running functional tests. This helps in debugging and reuse of models
 for quicker testing
-- `PYTEST_MYSQL_MODEL`, `PYTEST_PERCONA_MODEL`, `PYTEST_ETCD_MODEL`: setting these to a current model will have the functional tests use
+- `PYTEST_MYSQL_MODEL`, `PYTEST_ETCD_MODEL`: setting these to a current model will have the functional tests use
 that model instead of deploying another one.
 - `JUJU_DATA`: Specify where your juju client config directory is located. If not set, it will default to
 `~/.local/share/juju`. This is needed in functional testing as the tool runs some subprocess `juju` commands

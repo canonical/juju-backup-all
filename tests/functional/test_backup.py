@@ -15,9 +15,7 @@ async def test_mysql_innodb_backup(mysql_innodb_model: JujuModel, tmp_path: Path
     controller_name = controller.controller_name
     mysql_innodb_app = mysql_innodb_model.model.applications.get("mysql")
     mysql_innodb_app_name = "mysql"
-    output = subprocess.check_output(
-        "juju-backup-all -o {} -e percona-cluster -e etcd -e postgresql -x -j".format(tmp_path), shell=True
-    )
+    output = subprocess.check_output("juju-backup-all -o {} -e etcd -e postgresql -x -j".format(tmp_path), shell=True)
     output_dict = json.loads(output)
     expected_output_dir = tmp_path / controller_name / model_name / mysql_innodb_app_name
     app_backup_entry = output_dict.get("app_backups")[0]
@@ -35,7 +33,7 @@ async def test_postgresql_backup(postgresql_model: JujuModel, tmp_path: Path, co
     postgresql_app = postgresql_model.model.applications.get("postgresql")
     postgresql_app_name = "postgresql"
     output = subprocess.check_output(
-        "juju-backup-all -o {} -e percona-cluster -e etcd -e mysql-innodb-cluster -x -j".format(tmp_path), shell=True
+        "juju-backup-all -o {} -e etcd -e mysql-innodb-cluster -x -j".format(tmp_path), shell=True
     )
     output_dict = json.loads(output)
     expected_output_dir = tmp_path / controller_name / model_name / postgresql_app_name
@@ -48,28 +46,9 @@ async def test_postgresql_backup(postgresql_model: JujuModel, tmp_path: Path, co
     assert glob.glob(str(expected_output_dir) + "/pgdump-all-databases*.gz")
 
 
-async def test_percona_backup(percona_cluster_model: JujuModel, tmp_path: Path, controller: Controller):
-    model_name = percona_cluster_model.model_name
-    controller_name = controller.controller_name
-    percona_cluster_app = percona_cluster_model.model.applications.get("percona-cluster")
-    percona_app_name = "percona-cluster"
-    output = subprocess.check_output(
-        "juju-backup-all -o {} -e etcd -e mysql-innodb-cluster -e postgresql -x -j".format(tmp_path), shell=True
-    )
-    output_dict = json.loads(output)
-    expected_output_dir = tmp_path / controller_name / model_name / percona_app_name
-    app_backup_entry = output_dict.get("app_backups")[0]
-    assert any(str(tmp_path) in x.get("download_path") for x in output_dict.get("app_backups"))
-    assert app_backup_entry.get("controller") == controller_name
-    assert any(x.get("model") == model_name for x in output_dict.get("app_backups"))
-    assert app_backup_entry.get("charm") in percona_cluster_app.data.get("charm-url")
-    assert expected_output_dir.exists()
-    assert glob.glob(str(expected_output_dir) + "/mysqldump-all-databases*.gz")
-
-
 async def test_juju_controller_backup(tmp_path: Path, controller: Controller):
     output = subprocess.check_output(
-        "juju-backup-all -o {} -e etcd -e mysql-innodb-cluster -e percona-cluster -e postgresql -j".format(tmp_path),
+        "juju-backup-all -o {} -e etcd -e mysql-innodb-cluster -e postgresql -j".format(tmp_path),
         shell=True,
     )
     output_dict = json.loads(output)
@@ -83,7 +62,7 @@ async def test_juju_controller_backup(tmp_path: Path, controller: Controller):
 
 async def test_juju_client_config_backup(tmp_path: Path):
     output = subprocess.check_output(
-        "juju-backup-all -o {} -e etcd -e mysql-innodb-cluster -e percona-cluster -e postgresql -x".format(tmp_path),
+        "juju-backup-all -o {} -e etcd -e mysql-innodb-cluster -e postgresql -x".format(tmp_path),
         shell=True,
     )
     output_dict = json.loads(output)
@@ -101,7 +80,7 @@ async def test_etcd_backup(etcd_model: JujuModel, tmp_path: Path, controller: Co
     etcd_app: Application = etcd_model.model.applications.get("etcd")
     etcd_app_name = "etcd"
     output = subprocess.check_output(
-        "juju-backup-all -o {} -e percona-cluster -e mysql-innodb-cluster -e postgresql -x -j".format(tmp_path),
+        "juju-backup-all -o {} -e mysql-innodb-cluster -e postgresql -x -j".format(tmp_path),
         shell=True,
     )
     output_dict = json.loads(output)

@@ -8,7 +8,7 @@ description: |
   charms. The tool also includes options to exclude charms, select which
   controllers to backup, and backup local configs.
 
-  Supported charms: mysql-innodb-cluster, percona-cluster, etcd, postgresql
+  Supported charms: mysql-innodb-cluster, etcd, postgresql
 
   Supported config backups: Juju
 issues: https://bugs.launchpad.net/juju-backup-all

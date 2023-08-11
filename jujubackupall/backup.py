@@ -97,18 +97,6 @@ class MysqlInnodbBackup(MysqlBackup):
     charm_name = "mysql-innodb-cluster"
 
 
-class PerconaClusterBackup(MysqlBackup):
-    charm_name = "percona-cluster"
-
-    def _set_pxc_mode(self, mode: str):
-        check_output_unit_action(self.unit, "set-pxc-strict-mode", mode=mode)
-
-    def backup(self):
-        self._set_pxc_mode("MASTER")
-        super().backup()
-        self._set_pxc_mode("ENFORCING")
-
-
 class EtcdBackup(CharmBackup):
     charm_name = "etcd"
     backup_action_name = "snapshot"
@@ -318,8 +306,6 @@ class BackupTracker:
 def get_charm_backup_instance(charm_name: str, unit: Unit) -> CharmBackupType:
     if charm_name == MysqlInnodbBackup.charm_name:
         return MysqlInnodbBackup(unit=unit)
-    if charm_name == PerconaClusterBackup.charm_name:
-        return PerconaClusterBackup(unit=unit)
     if charm_name == EtcdBackup.charm_name:
         return EtcdBackup(unit=unit)
     if charm_name == PostgresqlBackup.charm_name:

@@ -13,7 +13,6 @@ from jujubackupall.backup import (
     JujuClientConfigBackup,
     JujuControllerBackup,
     MysqlInnodbBackup,
-    PerconaClusterBackup,
     PostgresqlBackup,
     SwiftBackup,
     get_charm_backup_instance,
@@ -26,7 +25,6 @@ class TestGetCharmBackupInstance(unittest.TestCase):
     def test_get_backup_instance(self):
         test_cases = [
             ("mysql-innodb-cluster", MysqlInnodbBackup),
-            ("percona-cluster", PerconaClusterBackup),
             ("etcd", EtcdBackup),
             ("postgresql", PostgresqlBackup),
             ("swift-proxy", SwiftBackup),
@@ -171,20 +169,6 @@ class TestMysqlBackup(unittest.TestCase):
             unit=mock_unit, source=str("/tmp/" / backup_filepath), destination=str(save_path)
         )
         self.assertEqual(mock_ssh_run_on_unit.call_count, 2, "assert ssh run on unit called twice")
-
-    @patch("jujubackupall.backup.check_output_unit_action")
-    def test_percona_backup_setting_pxc(self, mock_check_output_unit_action: Mock):
-        mock_unit = Mock()
-        results_dict = {"results": {"mysqldump-file": "mysql_dumpfile"}}
-        mock_check_output_unit_action.return_value = results_dict
-        percona_backup = PerconaClusterBackup(mock_unit)
-        percona_backup.backup()
-        expected_calls = [
-            call(mock_unit, "set-pxc-strict-mode", mode="MASTER"),
-            call(mock_unit, "mysqldump"),
-            call(mock_unit, "set-pxc-strict-mode", mode="ENFORCING"),
-        ]
-        mock_check_output_unit_action.assert_has_calls(expected_calls)
 
 
 class TestEtcdBackup(unittest.TestCase):
