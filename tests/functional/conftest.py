@@ -82,7 +82,7 @@ async def models(controller):
         )
     if not postgresql_app:
         await models["postgresql"].model.deploy(
-            "ch:postgresql", application_name="postgresql", series="jammy", channel="stable", num_units=1
+            "ch:postgresql", application_name="postgresql", series="jammy", channel="edge", num_units=1
         )
     if not etcd_app:
         await models["etcd"].model.deploy(
