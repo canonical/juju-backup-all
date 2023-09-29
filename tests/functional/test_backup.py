@@ -46,6 +46,26 @@ async def test_postgresql_backup(postgresql_model: JujuModel, tmp_path: Path, co
     assert glob.glob(str(expected_output_dir) + "/pgdump-all-databases*.gz")
 
 
+async def test_etcd_backup(etcd_model: JujuModel, tmp_path: Path, controller: Controller):
+    model_name = etcd_model.model_name
+    controller_name = controller.controller_name
+    etcd_app: Application = etcd_model.model.applications.get("etcd")
+    etcd_app_name = "etcd"
+    output = subprocess.check_output(
+        "juju-backup-all -o {} -e mysql-innodb-cluster -e postgresql -x -j".format(tmp_path),
+        shell=True,
+    )
+    output_dict = json.loads(output)
+    expected_output_dir = tmp_path / controller_name / model_name / etcd_app_name
+    app_backup_entry = output_dict.get("app_backups")[0]
+    assert any(str(tmp_path) in x.get("download_path") for x in output_dict.get("app_backups"))
+    assert app_backup_entry.get("controller") == controller_name
+    assert any(x.get("model") == model_name for x in output_dict.get("app_backups"))
+    assert app_backup_entry.get("charm") in etcd_app.data.get("charm-url")
+    assert expected_output_dir.exists()
+    assert glob.glob(str(expected_output_dir) + "/etcd-snapshot*.gz")
+
+
 async def test_juju_controller_backup(tmp_path: Path, controller: Controller):
     output = subprocess.check_output(
         "juju-backup-all -o {} -e etcd -e mysql-innodb-cluster -e postgresql -j".format(tmp_path),
@@ -72,23 +92,3 @@ async def test_juju_client_config_backup(tmp_path: Path):
     assert config_backup_entry.get("config") == "juju"
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + "/juju-*.gz")
-
-
-async def test_etcd_backup(etcd_model: JujuModel, tmp_path: Path, controller: Controller):
-    model_name = etcd_model.model_name
-    controller_name = controller.controller_name
-    etcd_app: Application = etcd_model.model.applications.get("etcd")
-    etcd_app_name = "etcd"
-    output = subprocess.check_output(
-        "juju-backup-all -o {} -e mysql-innodb-cluster -e postgresql -x -j".format(tmp_path),
-        shell=True,
-    )
-    output_dict = json.loads(output)
-    expected_output_dir = tmp_path / controller_name / model_name / etcd_app_name
-    app_backup_entry = output_dict.get("app_backups")[0]
-    assert any(str(tmp_path) in x.get("download_path") for x in output_dict.get("app_backups"))
-    assert app_backup_entry.get("controller") == controller_name
-    assert any(x.get("model") == model_name for x in output_dict.get("app_backups"))
-    assert app_backup_entry.get("charm") in etcd_app.data.get("charm-url")
-    assert expected_output_dir.exists()
-    assert glob.glob(str(expected_output_dir) + "/etcd-snapshot*.gz")
