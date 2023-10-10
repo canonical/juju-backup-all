@@ -142,7 +142,7 @@ class TestMysqlBackup(unittest.TestCase):
     def test_backup_innodb(self, mock_check_output_unit_action: Mock):
         mock_unit = Mock()
         mysql_dumpfile = "mydumpfile"
-        results_dict = {"results": {"mysqldump-file": mysql_dumpfile}}
+        results_dict = {"mysqldump-file": mysql_dumpfile}
         mock_check_output_unit_action.return_value = results_dict
         mysql_innodb_backup = MysqlInnodbBackup(mock_unit)
         mysql_innodb_backup.backup()
@@ -176,7 +176,7 @@ class TestEtcdBackup(unittest.TestCase):
     def test_etcd_backup(self, mock_check_output_unit_action: Mock):
         mock_unit = Mock()
         expected_path_string = "my_path"
-        results_dict = {"results": {"snapshot": {"path": expected_path_string}}}
+        results_dict = {"snapshot": {"path": expected_path_string}}
         mock_check_output_unit_action.return_value = results_dict
         etcd_backup_inst = EtcdBackup(mock_unit)
         etcd_backup_inst.backup()

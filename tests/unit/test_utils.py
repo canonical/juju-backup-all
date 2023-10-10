@@ -113,9 +113,10 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         mock_action = Mock()
         mock_action.safe_data = safe_data
         mock_run_async.return_value = mock_action
+        mock_run_async.return_value.results = "foo"
         result = check_output_unit_action(mock_unit, action_name)
         self.assertEqual(mock_run_async.call_count, 2, "assert run_async called twice")
-        self.assertEqual(result, safe_data)
+        self.assertEqual(result, "foo")
         mock_unit.run_action.assert_called_once_with(action_name)
         mock_action.wait.assert_called_once()
 
@@ -129,9 +130,10 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         mock_action = Mock()
         mock_action.safe_data = safe_data
         mock_run_async.return_value = mock_action
+        mock_run_async.return_value.results = "foo"
         result = check_output_unit_action(mock_unit, action_name, **action_params)
         self.assertEqual(mock_run_async.call_count, 2, "assert run_async called twice")
-        self.assertEqual(result, safe_data)
+        self.assertEqual(result, "foo")
         mock_unit.run_action.assert_called_once_with(action_name, **action_params)
         mock_action.wait.assert_called_once()
 
