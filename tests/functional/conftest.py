@@ -137,10 +137,7 @@ async def etcd_model(models):
     model = models["etcd"].model
     etcd_app = model.applications.get("etcd")
     easyrsa_app = model.applications.get("easyrsa")
-    # etcd:cluster peer relation is already present
-    # if etcd easyrsa relation is not present
-    if len(etcd_app.relations) < 2:
-        await etcd_app.relate("certificates", "easyrsa:client")
+    await etcd_app.relate("certificates", "easyrsa:client")
     await model.block_until(lambda: etcd_app.status == "active")
     await model.block_until(lambda: easyrsa_app.status == "active")
     return models["etcd"]
