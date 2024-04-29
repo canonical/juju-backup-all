@@ -78,7 +78,7 @@ async def models(controller):
     # deploy apps if they haven't been deployed previously
     if not mysql_innodb_app:
         await models["mysql"].model.deploy(
-            "ch:mysql-innodb-cluster", application_name="mysql", series="focal", channel="stable", num_units=3
+            "ch:mysql-innodb-cluster", application_name="mysql", series="focal", channel="8.0/stable", num_units=3
         )
     if not postgresql_app:
         await models["postgresql"].model.deploy(
