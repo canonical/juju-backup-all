@@ -79,8 +79,8 @@ apps:
 parts:
   juju-backup-all:
     plugin: python
-    requirements:
-      - requirements.txt
+    python-packages:
+      - .
     source: .
     source-type: git
     override-build: |
