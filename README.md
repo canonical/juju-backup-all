@@ -2,7 +2,12 @@
 
 ## Introduction
 
-This Juju plugin allows operators to backup juju controllers as well as the following charms:
+This Juju plugin allows operators to streamline backing up their models in one go.
+
+While various charms offer backup capabilities, it is up to the operator to determine which charms do so and how to invoke said capability.
+The juju-backup-all plugin simplifies this down to a single command.
+
+It currently supports backing juju controllers as well as the following charms:
 - [MySQL Innodb Cluster](https://charmhub.io/mysql-innodb-cluster)
 - [PostgreSQL](https://charmhub.io/postgresql)
 - [etcd](https://charmhub.io/etcd)
