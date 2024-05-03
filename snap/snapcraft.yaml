@@ -1,19 +1,66 @@
 name: juju-backup-all
 base: core20
 adopt-info: juju-backup-all
-summary: Tool for backing up charms, local configs, and Juju controllers.
+summary: Tool for backing up charms, local juju configs, and juju controllers.
 description: |
-  Juju-backup-all allows operators to perform backups across all controllers
-  and models. It provides autodiscovery, backing up all applications of supported
-  charms. The tool also includes options to exclude charms, select which
-  controllers to backup, and backup local configs.
+  **Introduction**
+  Juju-backup-all allows operators to perform backups across all juju controllers
+  and models. It provides auto-discovery, backing up all applications of supported
+  charms. The tool also includes options to exclude charms, select which juju
+  controllers to backup, and backup local juju configs.
 
-  Supported charms: mysql-innodb-cluster, etcd, postgresql
+  Supported charms:
+  * etcd
+  * postgresql
+  * mysql-innodb-cluster
 
-  Supported config backups: Juju
-issues: https://bugs.launchpad.net/juju-backup-all
-source-code: https://git.launchpad.net/juju-backup-all
-website: https://launchpad.net/juju-backup-all
+  Supported juju backups:
+  * Juju configs
+  * Juju controllers
+
+  **Installation**
+  Install juju-backup-all from Snap Store with:
+
+  `
+     snap install juju-backup-all
+  `
+
+  Then, make sure the appropriate interfaces are plugged:
+
+  `
+     snap connect juju-backup-all:juju-client-observe
+  `
+
+  `
+     snap connect juju-backup-all:ssh-keys
+  `
+
+  **Usage**
+  This tool primarily auto-discovers controllers/charms that need backing up. To backup the current
+  controller, simply run:
+
+  `
+     juju-backup-all
+  `
+
+  This will backup all apps of all models (in the current controller) of supported charms and output
+  them into `juju-backups/` directory. It will also backup the local juju client config.
+
+  For a more complex command, here's an example that specifies an output directory, excludes certain
+  charms, excludes the juju client config backup, and runs backups on all controllers.
+
+  `
+     juju-backup-all -o my/backups/ -e postgresql -e etcd  --all-controllers
+  `
+
+  The following command will give all the possible arguments that can be passed to the tool:
+
+  `
+     juju-backup-all -h
+  `
+issues: https://github.com/canonical/juju-backup-all/issues
+source-code: https://github.com/canonical/juju-backup-all
+website: https://github.com/canonical/juju-backup-all
 license: Apache-2.0
 confinement: strict
 
