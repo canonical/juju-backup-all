@@ -16,13 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install yq
-        run: sudo snap install yq
       - name: Snapcraft install
         run: sudo snap install --classic snapcraft
       - name: Get snap name
         id: snap
-        run: echo "name=$(yq '.name' snap/snapcraft.yaml)" >> $GITHUB_OUTPUT
+        run: grep -Po '(?<=^name:)\s*\K\w+' snap/snapcraft.yaml >> $GITHUB_OUTPUT
       - name: Snapcraft promote snap
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }}
