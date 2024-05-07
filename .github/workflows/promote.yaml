@@ -1,0 +1,34 @@
+name: Promote snap to other tracks and channels
+
+on:
+  workflow_dispatch:
+    inputs:
+      destination-channel:
+        description: 'Destination Channel, e.g. latest/candidate'
+        required: true
+      origin-channel:
+        description: 'Origin Channel, e.g. latest/edge'
+        required: true
+
+jobs:
+  promote-snap:
+    name: Promote snap
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Snapcraft install
+        run: sudo snap install --classic snapcraft
+      - name: Get snap name
+        id: snap
+        run: awk '/^name:/ {print $2}' snap/snapcraft.yaml >> $GITHUB_OUTPUT
+      - name: Snapcraft promote snap
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }}
+          SNAPCRAFT_HAS_TTY: "true" # this is necessary because snapcraft will not allow --yes for promotions of the edge channel https://github.com/canonical/snapcraft/issues/4439
+        run: |
+          # Note: using `yes |` instead of `--yes` because snapcraft will
+          #       refuse to non-interactively promote a snap from the edge
+          #       channel if it is done without any branch qualifiers
+          yes | snapcraft promote ${{ steps.snap.outputs.name }}  \
+          --from-channel ${{ github.event.inputs.origin-channel }} \
+          --to-channel ${{ github.event.inputs.destination-channel }}
