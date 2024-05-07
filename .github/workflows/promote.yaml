@@ -20,7 +20,7 @@ jobs:
         run: sudo snap install --classic snapcraft
       - name: Get snap name
         id: snap
-        run: grep -Po '(?<=^name:)\s*\K\w+' snap/snapcraft.yaml >> $GITHUB_OUTPUT
+        run: awk '/name:/ {print $2}' snap/snapcraft.yaml >> $GITHUB_OUTPUT
       - name: Snapcraft promote snap
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }}
