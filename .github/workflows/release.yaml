@@ -18,6 +18,8 @@ jobs:
       snap: ${{ steps.build.outputs.snap }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for version determination
       - uses: snapcore/action-build@v1
         id: build
       - uses: actions/upload-artifact@v4
