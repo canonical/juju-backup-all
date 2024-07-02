@@ -57,5 +57,9 @@ class Config:
         return self.args.get("timeout")
 
     @property
+    def basedir(self):
+        return self.args.get("basedir")
+
+    @property
     def use_current_controller(self) -> bool:
         return not self.controllers and not self.all_controllers

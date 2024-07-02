@@ -20,6 +20,7 @@
 import argparse
 import logging
 import os
+from pathlib import Path
 
 from jujubackupall import globals
 from jujubackupall.config import Config
@@ -97,6 +98,18 @@ def make_cli_parser():
     )
     parser.add_argument(
         "-t", "--timeout", dest="timeout", default=600, help="timeout in seconds for long running commands.", type=int
+    )
+    parser.add_argument(
+        "-b",
+        "--app-backup-basedir",
+        dest="app_backup_basedir",
+        default=Path("/home/ubuntu"),
+        type=Path,
+        help=(
+            "The base directory for application backups. "
+            "This is useful when the default backup location inside the machine is full, "
+            "and the user might need to change the backup location to another disk."
+        ),
     )
     return parser
 

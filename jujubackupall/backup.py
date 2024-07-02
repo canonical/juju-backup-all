@@ -58,8 +58,11 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
     charm_name: str = NotImplemented
     _backup_filepath: Path = None
 
-    def __init__(self, unit: Unit):
+    def __init__(self, unit: Unit, backup_basedir: Path = Path("/home/ubuntu")):
         self.unit = unit
+        self.backup_basedir = backup_basedir
+        if self.backup_basedir is not None:
+            ssh_run_on_unit(unit=unit, command=f"mkdir -p {self.backup_basedir}")
 
     @property
     def backup_filepath(self):
@@ -81,7 +84,7 @@ class MysqlBackup(CharmBackup, metaclass=ABCMeta):
     backup_action_name = "mysqldump"
 
     def backup(self):
-        action_output = check_output_unit_action(self.unit, self.backup_action_name)
+        action_output = check_output_unit_action(self.unit, self.backup_action_name, basedir=str(self.backup_basedir))
         self.backup_filepath = Path(action_output.get("mysqldump-file"))
 
     def download_backup(self, save_path: Path) -> Path:
@@ -102,19 +105,20 @@ class EtcdBackup(CharmBackup):
     backup_action_name = "snapshot"
 
     def backup(self):
-        action_output = check_output_unit_action(self.unit, self.backup_action_name)
+        action_output = check_output_unit_action(self.unit, self.backup_action_name, target=str(self.backup_basedir))
         self.backup_filepath = Path(action_output.get("snapshot").get("path"))
 
 
 class PostgresqlBackup(CharmBackup):
     charm_name = "postgresql"
     date_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
-    pgdump_filename = f"pgdump-all-databases-{date_suffix}"
-    backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {pgdump_filename}.gz"
+    pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
 
     def backup(self):
-        ssh_run_on_unit(unit=self.unit, command=self.backup_cmd)
-        self.backup_filepath = Path(f"/home/ubuntu/{self.pgdump_filename}.gz")
+        target = self.backup_basedir / self.pgdump_filename
+        backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {target}"
+        ssh_run_on_unit(unit=self.unit, command=backup_cmd)
+        self.backup_filepath = target
 
 
 class SwiftBackup(CharmBackup):
@@ -303,13 +307,15 @@ class BackupTracker:
         return json.dumps(report, indent=2)
 
 
-def get_charm_backup_instance(charm_name: str, unit: Unit) -> CharmBackupType:
+def get_charm_backup_instance(
+    charm_name: str, unit: Unit, backup_basedir: Path = Path("/home/ubuntu")
+) -> CharmBackupType:
     if charm_name == MysqlInnodbBackup.charm_name:
-        return MysqlInnodbBackup(unit=unit)
+        return MysqlInnodbBackup(unit=unit, backup_basedir=backup_basedir)
     if charm_name == EtcdBackup.charm_name:
-        return EtcdBackup(unit=unit)
+        return EtcdBackup(unit=unit, backup_basedir=backup_basedir)
     if charm_name == PostgresqlBackup.charm_name:
-        return PostgresqlBackup(unit=unit)
+        return PostgresqlBackup(unit=unit, backup_basedir=backup_basedir)
     if charm_name == SwiftBackup.charm_name:
-        return SwiftBackup(unit=unit)
+        return SwiftBackup(unit=unit, backup_basedir=backup_basedir)
     raise Exception("{} is not a supported charm.".format(charm_name))

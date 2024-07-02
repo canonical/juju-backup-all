@@ -22,7 +22,8 @@ from jujubackupall.errors import JujuControllerBackupError
 
 
 class TestGetCharmBackupInstance(unittest.TestCase):
-    def test_get_backup_instance(self):
+    @patch("jujubackupall.backup.ssh_run_on_unit")
+    def test_get_backup_instance(self, mock_ssh_run_on_unit: Mock):
         test_cases = [
             ("mysql-innodb-cluster", MysqlInnodbBackup),
             ("etcd", EtcdBackup),
@@ -139,15 +140,19 @@ class TestJujuClientConfigBackup(unittest.TestCase):
 
 class TestMysqlBackup(unittest.TestCase):
     @patch("jujubackupall.backup.check_output_unit_action")
-    def test_backup_innodb(self, mock_check_output_unit_action: Mock):
+    @patch("jujubackupall.backup.ssh_run_on_unit")
+    def test_backup_innodb(self, mock_ssh_run_on_unit: Mock, mock_check_output_unit_action: Mock):
         mock_unit = Mock()
+        backup_basedir = Path("/home/ubuntu")
         mysql_dumpfile = "mydumpfile"
         results_dict = {"mysqldump-file": mysql_dumpfile}
         mock_check_output_unit_action.return_value = results_dict
-        mysql_innodb_backup = MysqlInnodbBackup(mock_unit)
+        mysql_innodb_backup = MysqlInnodbBackup(mock_unit, backup_basedir=backup_basedir)
         mysql_innodb_backup.backup()
         self.assertEqual(mysql_innodb_backup.backup_filepath, Path(mysql_dumpfile))
-        mock_check_output_unit_action.assert_called_once_with(mock_unit, mysql_innodb_backup.backup_action_name)
+        mock_check_output_unit_action.assert_called_once_with(
+            mock_unit, mysql_innodb_backup.backup_action_name, basedir=str(backup_basedir)
+        )
 
     @patch("jujubackupall.backup.ensure_path_exists")
     @patch("jujubackupall.backup.scp_from_unit")
@@ -161,7 +166,7 @@ class TestMysqlBackup(unittest.TestCase):
         save_path = Path("my-path")
         backup_filepath = Path("some-path")
         mock_unit = Mock()
-        mysql_innodb_backup = MysqlInnodbBackup(mock_unit)
+        mysql_innodb_backup = MysqlInnodbBackup(mock_unit, backup_basedir=None)
         mysql_innodb_backup.backup_filepath = backup_filepath
         mysql_innodb_backup.download_backup(save_path)
         mock_ensure_path_exists.assert_called_once_with(path=save_path)
@@ -173,24 +178,33 @@ class TestMysqlBackup(unittest.TestCase):
 
 class TestEtcdBackup(unittest.TestCase):
     @patch("jujubackupall.backup.check_output_unit_action")
-    def test_etcd_backup(self, mock_check_output_unit_action: Mock):
+    @patch("jujubackupall.backup.ssh_run_on_unit")
+    def test_etcd_backup(self, mock_ssh_run_on_unit: Mock, mock_check_output_unit_action: Mock):
         mock_unit = Mock()
+        backup_basedir = Path("/home/ubuntu")
         expected_path_string = "my_path"
         results_dict = {"snapshot": {"path": expected_path_string}}
         mock_check_output_unit_action.return_value = results_dict
-        etcd_backup_inst = EtcdBackup(mock_unit)
+        etcd_backup_inst = EtcdBackup(mock_unit, backup_basedir=backup_basedir)
         etcd_backup_inst.backup()
-        mock_check_output_unit_action.assert_called_once()
         self.assertEqual(etcd_backup_inst.backup_filepath, Path(expected_path_string))
+        mock_check_output_unit_action.assert_called_once_with(
+            mock_unit, etcd_backup_inst.backup_action_name, target=str(backup_basedir)
+        )
 
 
 class TestPostgresqlBackup(unittest.TestCase):
     @patch("jujubackupall.backup.ssh_run_on_unit")
     def test_postgresql_backup(self, mock_ssh_run_on_unit: Mock):
         mock_unit = Mock()
-        postgresql_backup_inst = PostgresqlBackup(mock_unit)
+        backup_basedir = Path("/home/ubuntu")
+        postgresql_backup_inst = PostgresqlBackup(mock_unit, backup_basedir=backup_basedir)
+        expected_path_string = backup_basedir / postgresql_backup_inst.pgdump_filename
         postgresql_backup_inst.backup()
-        mock_ssh_run_on_unit.assert_called_once()
+        self.assertEqual(postgresql_backup_inst.backup_filepath, Path(expected_path_string))
+        mock_ssh_run_on_unit.assert_called_with(
+            unit=mock_unit, command=f"sudo -u postgres pg_dumpall | gzip > {expected_path_string}"
+        )
 
 
 class TestBackupTracker(unittest.TestCase):

@@ -96,7 +96,7 @@ class BackupProcessor:
             with connect_controller(controller_name) as controller:
                 logger.info("[{}] Processing backups.".format(controller.controller_name))
                 controller_processor = ControllerProcessor(
-                    controller, self.apps_to_backup, Path(self.config.output_dir)
+                    controller, self.apps_to_backup, Path(self.config.output_dir), self.config.basedir
                 )
                 controller_processor.backup_models(omit_models=omit_models)
                 if self.config.backup_controller:
@@ -105,7 +105,13 @@ class BackupProcessor:
 
 
 class ControllerProcessor:
-    def __init__(self, controller: Controller, apps_to_backup: List[str], base_output_path: Path):
+    def __init__(
+        self,
+        controller: Controller,
+        apps_to_backup: List[str],
+        base_output_path: Path,
+        app_backup_basedir: Path = "/home/ubuntu",
+    ):
         """Process all backups within a connected Juju controller.
 
         :param controller: connected Juju controller
@@ -115,6 +121,7 @@ class ControllerProcessor:
         self.controller = controller
         self.apps_to_backup = apps_to_backup
         self.base_output_path = base_output_path
+        self.app_backup_basedir = app_backup_basedir
 
     def backup_controller(self):
         controller_backup_save_path = self.base_output_path / self.controller.controller_name
