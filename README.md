@@ -126,7 +126,7 @@ to run the unit tests.
 To run unit tests:
 
 ```bash
-make unit
+make unittests
 ```
 
 To run unit tests and also generate html coverage reports:
