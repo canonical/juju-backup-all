@@ -1,19 +1,20 @@
-# Juju Backup-All-the-Things
+# Juju Backup All
 
 ## Introduction
 
-This Juju plugin allows operators to streamline backing up their models in one go.
+The juju-backup-all snap allows operators to streamline backing up their models in one go.
 
-While various charms offer backup capabilities, it is up to the operator to determine which charms do so and how to invoke said capability.
-The juju-backup-all plugin simplifies this down to a single command.
+While various charms offer backup capabilities, it is up to the operator to determine which charms
+do so and how to invoke said capability. The juju-backup-all snap simplifies this down to a single
+command: `juju-backup-all`.
 
-It currently supports backing juju controllers as well as the following charms:
+It currently supports backing up juju controllers, juju configs, and the following charms:
 - [MySQL Innodb Cluster](https://charmhub.io/mysql-innodb-cluster)
 - [PostgreSQL](https://charmhub.io/postgresql)
 - [etcd](https://charmhub.io/etcd)
 
-The plugin enumerates through all controllers, backing up the controller and scanning through each model for any
-applications that can be backed up. It then saves these backups.
+This snap enumerates through all controllers, backing up the controller and scanning through each
+model for any applications that can be backed up. It then saves these backups.
 
 Find it on the Snap Store!
 
@@ -21,7 +22,7 @@ Find it on the Snap Store!
     <img src="https://snapcraft.io/static/images/badges/en/snap-store-black.svg" alt="Get it from the Snap Store" width="200" />
 </a>
 
-## Install
+## Installation
 
 Install juju-backup-all from Snap Store with:
 
@@ -38,17 +39,18 @@ snap connect juju-backup-all:ssh-keys
 
 ## Usage
 
-This tool primarily auto-discovers controllers/charms that need backing up. To backup the current controller, simply run:
+This tool primarily auto-discovers controllers/charms that need backing up. To backup the current
+controller, simply run:
 
 ```bash
 juju-backup-all
 ```
 
-This will backup all apps of all models (in the current controller) of supported charms and output them into
-`juju-backups/` directory. It will also backup the local juju client config.
+This will backup all apps of all models (in the current controller) of supported charms and output
+them into `juju-backups/` directory. It will also backup the local juju client config.
 
-For a more complex command, here's an example that specifies an output directory, excludes certain charms, excludes the
-juju client config backup, and runs backups on all controllers.
+For a more complex command, here's an example that specifies an output directory, excludes certain
+charms, excludes the juju client config backup, and runs backups on all controllers.
 
 ```bash
 juju-backup-all -o my/backups/ \

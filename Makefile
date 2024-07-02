@@ -29,7 +29,7 @@ install: venv
 		( \
 			. venv/bin/activate; \
 			pip install --upgrade pip setuptools wheel; \
-			pip install -r requirements.txt; \
+			pip install .; \
 		)
 
 install-dev: install

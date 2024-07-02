@@ -1,4 +1,1 @@
-pytest
-pytest-html
-pytest-asyncio
-pytest-timeout
+pytest-operator
