@@ -110,7 +110,7 @@ class ControllerProcessor:
         controller: Controller,
         apps_to_backup: List[str],
         base_output_path: Path,
-        app_backup_basedir: Path = "/home/ubuntu",
+        app_backup_basedir: Path = Path("/home/ubuntu"),
     ):
         """Process all backups within a connected Juju controller.
 
@@ -158,7 +158,9 @@ class ControllerProcessor:
     def backup_app(self, app: Application, app_name: str, charm_name: str, model_name: str):
         try:
             leader_unit = get_leader(app.units)
-            charm_backup_instance = get_charm_backup_instance(charm_name=charm_name, unit=leader_unit)
+            charm_backup_instance = get_charm_backup_instance(
+                charm_name=charm_name, unit=leader_unit, backup_basedir=self.app_backup_basedir
+            )
             self._log("Backing up app.", app_name=app_name, model_name=model_name)
             charm_backup_instance.backup()
             self._log("Downloading backup.", app_name=app_name, model_name=model_name)
