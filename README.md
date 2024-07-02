@@ -57,6 +57,14 @@ juju-backup-all -o my/backups/ \
   --all-controllers
 ```
 
+If the charm cannot perform backup because the disk is full, or the default
+backup base directory is not writable for any reason. You can change the backup
+base directory for the applications:
+
+```bash
+juju-backup-all -b /backups
+```
+
 The following command will give all the possible arguments that can be passed to the tool:
 
 ```bash
