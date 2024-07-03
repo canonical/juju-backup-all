@@ -61,7 +61,6 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
     def __init__(self, unit: Unit, backup_basedir: Path):
         self.unit = unit
         self.backup_basedir = backup_basedir
-        ssh_run_on_unit(unit=unit, command=f"mkdir -p {self.backup_basedir}")
 
     @property
     def backup_filepath(self):
@@ -114,6 +113,7 @@ class PostgresqlBackup(CharmBackup):
     pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
 
     def backup(self):
+        ssh_run_on_unit(unit=self.unit, command=f"mkdir -p {self.backup_basedir}")
         self.backup_filepath = self.backup_basedir / self.pgdump_filename
         backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
         ssh_run_on_unit(unit=self.unit, command=backup_cmd)

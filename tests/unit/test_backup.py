@@ -184,7 +184,7 @@ class TestMysqlBackup(unittest.TestCase):
         mock_scp_from_unit.assert_called_once_with(
             unit=mock_unit, source=str("/tmp/" / backup_filepath), destination=str(save_path)
         )
-        self.assertEqual(mock_ssh_run_on_unit.call_count, 3, "assert ssh run on unit called third times")
+        self.assertEqual(mock_ssh_run_on_unit.call_count, 2, "assert ssh run on unit called twice")
 
 
 class TestEtcdBackup(unittest.TestCase):
