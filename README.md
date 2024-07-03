@@ -64,7 +64,7 @@ default backup base directory is not writable for any reason. You can change the
 backup base directory for the unit.
 
 Currently, the following applications are supported with the those default
-vaules.
+values.
 
 ```bash
 juju-backup-all \

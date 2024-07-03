@@ -124,9 +124,9 @@ class ControllerProcessor:
         :param controller: connected Juju controller
         :param apps_to_backup: list of apps to backup
         :param base_output_path: base path for saving backups
-        :param backup_location_on_postgresql: backup localtion on postgresql unit
-        :param backup_location_on_mysql: backup localtion on mysql unit
-        :param backup_location_on_etcd: backup localtion on etcd unit
+        :param backup_location_on_postgresql: backup location on postgresql unit
+        :param backup_location_on_mysql: backup location on mysql unit
+        :param backup_location_on_etcd: backup location on etcd unit
         """
         self.controller = controller
         self.apps_to_backup = apps_to_backup
