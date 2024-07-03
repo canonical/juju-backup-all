@@ -59,12 +59,18 @@ juju-backup-all -o my/backups/ \
   --all-controllers
 ```
 
-If the charm cannot perform backup because the disk is full, or the default
-backup base directory is not writable for any reason. You can change the backup
-base directory for the applications:
+If the charm cannot perform backup because the disk on the unit is full, or the
+default backup base directory is not writable for any reason. You can change the
+backup base directory for the unit.
+
+Currently, the following applications are supported with the those default
+vaules.
 
 ```bash
-juju-backup-all -b /backups
+juju-backup-all \
+  --backup-location-on-postgresql "/home/ubuntu" \
+  --backup-location-on-mysql "/var/backups/mysql" \
+  --backup-location-on-etcd "/home/ubuntu/etcd-snapshots" \
 ```
 
 The following command will give all the possible arguments that can be passed to the tool:
