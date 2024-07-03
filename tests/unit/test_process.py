@@ -5,7 +5,12 @@ from collections import namedtuple
 from pathlib import Path
 from unittest.mock import ANY, Mock, call, patch
 
-from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
+from jujubackupall.constants import (
+    DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT,
+    DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT,
+    DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT,
+    SUPPORTED_BACKUP_CHARMS,
+)
 from jujubackupall.errors import ActionError, JujuControllerBackupError, NoLeaderError
 from jujubackupall.process import BackupProcessor, ControllerProcessor, JujuModel
 
@@ -156,7 +161,9 @@ class TestControllerProcessor(unittest.TestCase):
             controller=self.mock_controller,
             base_output_path=self.base_output_path,
             apps_to_backup=self.apps_to_backup,
-            app_backup_basedir=Path("/home/ubuntu"),
+            backup_location_on_postgresql=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+            backup_location_on_mysql=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+            backup_location_on_etcd=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
         )
 
     @staticmethod
@@ -229,7 +236,6 @@ class TestControllerProcessor(unittest.TestCase):
         mock_log: Mock,
     ):
         model_name = "my-model"
-        backup_basedir = Path("/home/ubuntu")
         mock_model = Mock()
         apps = [self.create_app_tuple(app_name) for app_name in ["mysql-innodb-cluster", "my-app"]]
         apps_dict = dict()
@@ -242,7 +248,13 @@ class TestControllerProcessor(unittest.TestCase):
         controller_processor.backup_apps(juju_model)
 
         calls_get_backup_instance = [
-            call(charm_name="mysql-innodb-cluster", unit=ANY, backup_basedir=backup_basedir),
+            call(
+                charm_name="mysql-innodb-cluster",
+                unit=ANY,
+                backup_location_on_postgresql=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+                backup_location_on_mysql=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+                backup_location_on_etcd=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+            ),
         ]
         mock_get_backup_instance.assert_has_calls(calls_get_backup_instance, any_order=True)
         mock_generate_full_backup_path.assert_called()

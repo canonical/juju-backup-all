@@ -17,7 +17,12 @@ from jujubackupall.backup import (
     SwiftBackup,
     get_charm_backup_instance,
 )
-from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
+from jujubackupall.constants import (
+    DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT,
+    DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT,
+    DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT,
+    MAX_CONTROLLER_BACKUP_RETRIES,
+)
 from jujubackupall.errors import JujuControllerBackupError
 
 
@@ -32,7 +37,13 @@ class TestGetCharmBackupInstance(unittest.TestCase):
         ]
         for charm_name, expected_backup_class in test_cases:
             with self.subTest(charm_name=charm_name, expected_backup_class=expected_backup_class):
-                backup_instance = get_charm_backup_instance(charm_name, Mock())
+                backup_instance = get_charm_backup_instance(
+                    charm_name,
+                    Mock(),
+                    Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+                    Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+                    Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+                )
                 self.assertIsInstance(backup_instance, expected_backup_class)
 
 
@@ -173,7 +184,7 @@ class TestMysqlBackup(unittest.TestCase):
         mock_scp_from_unit.assert_called_once_with(
             unit=mock_unit, source=str("/tmp/" / backup_filepath), destination=str(save_path)
         )
-        self.assertEqual(mock_ssh_run_on_unit.call_count, 2, "assert ssh run on unit called twice")
+        self.assertEqual(mock_ssh_run_on_unit.call_count, 3, "assert ssh run on unit called third times")
 
 
 class TestEtcdBackup(unittest.TestCase):

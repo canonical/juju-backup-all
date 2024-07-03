@@ -58,11 +58,10 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
     charm_name: str = NotImplemented
     _backup_filepath: Path = None
 
-    def __init__(self, unit: Unit, backup_basedir: Path = Path("/home/ubuntu")):
+    def __init__(self, unit: Unit, backup_basedir: Path):
         self.unit = unit
         self.backup_basedir = backup_basedir
-        if self.backup_basedir is not None:
-            ssh_run_on_unit(unit=unit, command=f"mkdir -p {self.backup_basedir}")
+        ssh_run_on_unit(unit=unit, command=f"mkdir -p {self.backup_basedir}")
 
     @property
     def backup_filepath(self):
@@ -115,10 +114,9 @@ class PostgresqlBackup(CharmBackup):
     pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
 
     def backup(self):
-        target = self.backup_basedir / self.pgdump_filename
-        backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {target}"
+        self.backup_filepath = self.backup_basedir / self.pgdump_filename
+        backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
         ssh_run_on_unit(unit=self.unit, command=backup_cmd)
-        self.backup_filepath = target
 
 
 class SwiftBackup(CharmBackup):
@@ -308,14 +306,18 @@ class BackupTracker:
 
 
 def get_charm_backup_instance(
-    charm_name: str, unit: Unit, backup_basedir: Path = Path("/home/ubuntu")
+    charm_name: str,
+    unit: Unit,
+    backup_location_on_postgresql: Path,
+    backup_location_on_mysql: Path,
+    backup_location_on_etcd: Path,
 ) -> CharmBackupType:
     if charm_name == MysqlInnodbBackup.charm_name:
-        return MysqlInnodbBackup(unit=unit, backup_basedir=backup_basedir)
+        return MysqlInnodbBackup(unit=unit, backup_basedir=backup_location_on_mysql)
     if charm_name == EtcdBackup.charm_name:
-        return EtcdBackup(unit=unit, backup_basedir=backup_basedir)
+        return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd)
     if charm_name == PostgresqlBackup.charm_name:
-        return PostgresqlBackup(unit=unit, backup_basedir=backup_basedir)
-    if charm_name == SwiftBackup.charm_name:
-        return SwiftBackup(unit=unit, backup_basedir=backup_basedir)
+        return PostgresqlBackup(unit=unit, backup_basedir=backup_location_on_postgresql)
+    if charm_name == SwiftBackup.charm_name:  # Not implemented
+        return SwiftBackup(unit=unit, backup_basedir="/home/ubuntu")
     raise Exception("{} is not a supported charm.".format(charm_name))
