@@ -61,7 +61,7 @@ juju-backup-all -o my/backups/ \
 
 If the charm cannot perform backup because the disk on the unit is full, or the
 default backup base directory is not writable for any reason. You can change the
-backup base directory for the unit.
+backup base directory for the unit. Directories will be created if needed.
 
 Currently, the following applications are supported with the those default
 values.
