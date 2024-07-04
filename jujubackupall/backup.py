@@ -113,6 +113,8 @@ class PostgresqlBackup(CharmBackup):
     pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
 
     def backup(self):
+        # we only need to create directory for postgres because mysql and etcd
+        # charms will create the directory by themselves
         ssh_run_on_unit(unit=self.unit, command=f"mkdir -p {self.backup_basedir}")
         self.backup_filepath = self.backup_basedir / self.pgdump_filename
         backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
