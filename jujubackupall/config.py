@@ -57,5 +57,17 @@ class Config:
         return self.args.get("timeout")
 
     @property
+    def backup_location_on_postgresql(self):
+        return self.args.get("backup_location_on_postgresql")
+
+    @property
+    def backup_location_on_mysql(self):
+        return self.args.get("backup_location_on_mysql")
+
+    @property
+    def backup_location_on_etcd(self):
+        return self.args.get("backup_location_on_etcd")
+
+    @property
     def use_current_controller(self) -> bool:
         return not self.controllers and not self.all_controllers

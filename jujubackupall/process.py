@@ -96,7 +96,12 @@ class BackupProcessor:
             with connect_controller(controller_name) as controller:
                 logger.info("[{}] Processing backups.".format(controller.controller_name))
                 controller_processor = ControllerProcessor(
-                    controller, self.apps_to_backup, Path(self.config.output_dir)
+                    controller,
+                    self.apps_to_backup,
+                    Path(self.config.output_dir),
+                    Path(self.config.backup_location_on_postgresql),
+                    Path(self.config.backup_location_on_mysql),
+                    Path(self.config.backup_location_on_etcd),
                 )
                 controller_processor.backup_models(omit_models=omit_models)
                 if self.config.backup_controller:
@@ -105,16 +110,30 @@ class BackupProcessor:
 
 
 class ControllerProcessor:
-    def __init__(self, controller: Controller, apps_to_backup: List[str], base_output_path: Path):
+    def __init__(
+        self,
+        controller: Controller,
+        apps_to_backup: List[str],
+        base_output_path: Path,
+        backup_location_on_postgresql: Path,
+        backup_location_on_mysql: Path,
+        backup_location_on_etcd: Path,
+    ):
         """Process all backups within a connected Juju controller.
 
         :param controller: connected Juju controller
         :param apps_to_backup: list of apps to backup
         :param base_output_path: base path for saving backups
+        :param backup_location_on_postgresql: backup location on postgresql unit
+        :param backup_location_on_mysql: backup location on mysql unit
+        :param backup_location_on_etcd: backup location on etcd unit
         """
         self.controller = controller
         self.apps_to_backup = apps_to_backup
         self.base_output_path = base_output_path
+        self.backup_location_on_postgresql = backup_location_on_postgresql
+        self.backup_location_on_mysql = backup_location_on_mysql
+        self.backup_location_on_etcd = backup_location_on_etcd
 
     def backup_controller(self):
         controller_backup_save_path = self.base_output_path / self.controller.controller_name
@@ -151,7 +170,13 @@ class ControllerProcessor:
     def backup_app(self, app: Application, app_name: str, charm_name: str, model_name: str):
         try:
             leader_unit = get_leader(app.units)
-            charm_backup_instance = get_charm_backup_instance(charm_name=charm_name, unit=leader_unit)
+            charm_backup_instance = get_charm_backup_instance(
+                charm_name=charm_name,
+                unit=leader_unit,
+                backup_location_on_postgresql=self.backup_location_on_postgresql,
+                backup_location_on_mysql=self.backup_location_on_mysql,
+                backup_location_on_etcd=self.backup_location_on_etcd,
+            )
             self._log("Backing up app.", app_name=app_name, model_name=model_name)
             charm_backup_instance.backup()
             self._log("Downloading backup.", app_name=app_name, model_name=model_name)

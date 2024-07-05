@@ -42,13 +42,17 @@ async def test_build_and_deploy(ops_test):
     await ops_test.model.wait_for_idle(timeout=WAIT_TIMEOUT, status="active", check_freq=3)
 
 
-def test_mysql_innodb_backup(ops_test, tmp_path: Path):
+@pytest.mark.parametrize("backup_location", ["/var/backups/mysql", "/home/ubuntu/abc"])
+def test_mysql_innodb_backup(backup_location, ops_test, tmp_path: Path):
     mysql_innodb_app_name = "mysql"
     model_name = ops_test.model.name
     controller_name = ops_test.controller_name
     mysql_innodb_app = ops_test.model.applications.get(mysql_innodb_app_name)
 
-    output = subprocess.check_output(f"juju-backup-all -o {tmp_path} -e etcd -e postgresql -x -j", shell=True)
+    output = subprocess.check_output(
+        f"juju-backup-all -o {tmp_path} -e etcd -e postgresql -x -j --backup-location-on-mysql {backup_location}",
+        shell=True,
+    )
     output_dict = json.loads(output)
     expected_output_dir = tmp_path / controller_name / model_name / mysql_innodb_app_name
     app_backup_entry = output_dict.get("app_backups")[0]
@@ -60,13 +64,17 @@ def test_mysql_innodb_backup(ops_test, tmp_path: Path):
     assert glob.glob(str(expected_output_dir) + "/mysqldump-all-databases*.gz")
 
 
-def test_postgresql_backup(ops_test, tmp_path: Path):
+@pytest.mark.parametrize("backup_location", ["/home/ubuntu", "/home/ubuntu/abc"])
+def test_postgresql_backup(backup_location, ops_test, tmp_path: Path):
     postgresql_app_name = "postgresql"
     model_name = ops_test.model.name
     controller_name = ops_test.controller_name
     postgresql_app = ops_test.model.applications.get(postgresql_app_name)
 
-    output = subprocess.check_output(f"juju-backup-all -o {tmp_path} -e etcd -e mysql-innodb-cluster -x -j", shell=True)
+    output = subprocess.check_output(
+        f"juju-backup-all -o {tmp_path} -e etcd -e mysql-innodb-cluster -x -j --backup-location-on-postgresql {backup_location}",
+        shell=True,
+    )
     output_dict = json.loads(output)
     expected_output_dir = tmp_path / controller_name / model_name / postgresql_app_name
     app_backup_entry = output_dict.get("app_backups")[0]
@@ -78,13 +86,15 @@ def test_postgresql_backup(ops_test, tmp_path: Path):
     assert glob.glob(str(expected_output_dir) + "/pgdump-all-databases*.gz")
 
 
-def test_etcd_backup(ops_test, tmp_path: Path):
+@pytest.mark.parametrize("backup_location", ["/home/ubuntu/etcd-snapshots", "/home/ubuntu/abc"])
+def test_etcd_backup(backup_location, ops_test, tmp_path: Path):
     etcd_app_name = "etcd"
     model_name = ops_test.model.name
     controller_name = ops_test.controller_name
     etcd_app = ops_test.model.applications.get(etcd_app_name)
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e mysql-innodb-cluster -e postgresql -x -j", shell=True
+        f"juju-backup-all -o {tmp_path} -e mysql-innodb-cluster -e postgresql -x -j --backup-location-on-etcd {backup_location}",
+        shell=True,
     )
     output_dict = json.loads(output)
     expected_output_dir = tmp_path / controller_name / model_name / etcd_app_name

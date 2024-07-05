@@ -20,10 +20,16 @@
 import argparse
 import logging
 import os
+from pathlib import Path
 
 from jujubackupall import globals
 from jujubackupall.config import Config
-from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
+from jujubackupall.constants import (
+    DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT,
+    DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT,
+    DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT,
+    SUPPORTED_BACKUP_CHARMS,
+)
 from jujubackupall.process import BackupProcessor
 
 FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -55,6 +61,9 @@ class Cli:
             output_dir=args.output_dir,
             log_level=args.log_level,
             timeout=args.timeout,
+            backup_location_on_postgresql=args.backup_location_on_postgresql,
+            backup_location_on_mysql=args.backup_location_on_mysql,
+            backup_location_on_etcd=args.backup_location_on_etcd,
         )
         return args_dict
 
@@ -97,6 +106,39 @@ def make_cli_parser():
     )
     parser.add_argument(
         "-t", "--timeout", dest="timeout", default=600, help="timeout in seconds for long running commands.", type=int
+    )
+    parser.add_argument(
+        "--backup-location-on-postgresql",
+        dest="backup_location_on_postgresql",
+        default=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+        type=Path,
+        help=(
+            "The base directory for PostgreSQL backups. "
+            "This is useful when the default backup location inside the machine is full, "
+            "and the user might need to change the backup location to another disk."
+        ),
+    )
+    parser.add_argument(
+        "--backup-location-on-mysql",
+        dest="backup_location_on_mysql",
+        default=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+        type=Path,
+        help=(
+            "The base directory for MySQL backups. "
+            "This is useful when the default backup location inside the machine is full, "
+            "and the user might need to change the backup location to another disk."
+        ),
+    )
+    parser.add_argument(
+        "--backup-location-on-etcd",
+        dest="backup_location_on_etcd",
+        default=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+        type=Path,
+        help=(
+            "The base directory for etcd backups. "
+            "This is useful when the default backup location inside the machine is full, "
+            "and the user might need to change the backup location to another disk."
+        ),
     )
     return parser
 

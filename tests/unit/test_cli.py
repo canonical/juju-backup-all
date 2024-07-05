@@ -6,7 +6,12 @@ from io import StringIO
 from unittest.mock import Mock, patch
 
 from jujubackupall.cli import Cli, make_cli_parser
-from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
+from jujubackupall.constants import (
+    DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT,
+    DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT,
+    DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT,
+    SUPPORTED_BACKUP_CHARMS,
+)
 
 all_controllers = False
 backup_controller = True
@@ -16,6 +21,9 @@ excluded_charms = ["mysql"]
 output_dir = "my_output_dir"
 log_level = "INFO"
 timeout = 10 * 60
+backup_location_on_postgresql = DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT
+backup_location_on_mysql = DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT
+backup_location_on_etcd = DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT
 
 
 class TestCli(unittest.TestCase):
@@ -31,6 +39,9 @@ class TestCli(unittest.TestCase):
             output_dir=output_dir,
             log_level=log_level,
             timeout=timeout,
+            backup_location_on_postgresql=backup_location_on_postgresql,
+            backup_location_on_mysql=backup_location_on_mysql,
+            backup_location_on_etcd=backup_location_on_etcd,
         )
         return args_dict
 
