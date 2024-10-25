@@ -156,8 +156,8 @@ class TestMysqlBackup(unittest.TestCase):
         mock_unit = Mock()
         backup_basedir = Path("/home/ubuntu")
         mysql_dumpfile = "mydumpfile"
-        results_dict = {"mysqldump-file": mysql_dumpfile}
-        mock_check_output_unit_action.return_value = results_dict
+        result_data = {"status": "completed", "results": {"mysqldump-file": mysql_dumpfile}}
+        mock_check_output_unit_action.return_value = result_data
         mysql_innodb_backup = MysqlInnodbBackup(mock_unit, backup_basedir=backup_basedir)
         mysql_innodb_backup.backup()
         self.assertEqual(mysql_innodb_backup.backup_filepath, Path(mysql_dumpfile))
@@ -194,8 +194,8 @@ class TestEtcdBackup(unittest.TestCase):
         mock_unit = Mock()
         backup_basedir = Path("/home/ubuntu")
         expected_path_string = "my_path"
-        results_dict = {"snapshot": {"path": expected_path_string}}
-        mock_check_output_unit_action.return_value = results_dict
+        result_data = {"status": "completed", "results": {"snapshot": {"path": expected_path_string}}}
+        mock_check_output_unit_action.return_value = result_data
         etcd_backup_inst = EtcdBackup(mock_unit, backup_basedir=backup_basedir)
         etcd_backup_inst.backup()
         self.assertEqual(etcd_backup_inst.backup_filepath, Path(expected_path_string))
