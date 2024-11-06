@@ -2,7 +2,7 @@ name: Publish snap
 
 on:
   push:
-    branches: [ main ]
+    branches: [ tmp/juju-2.9 ]
   release:
     types: [ published ]
 

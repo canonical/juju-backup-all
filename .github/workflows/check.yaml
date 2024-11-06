@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   pull_request:
     types: [ opened, synchronize, reopened ]
-    branches: [ master, main ]
+    branches: [ tmp/juju-2.9 ]
     paths-ignore:
       - '**.md'
       - '**.rst'
