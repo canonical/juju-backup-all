@@ -96,7 +96,7 @@ def check_output_unit_action(unit: Unit, action_name: str, **params) -> dict:
     run_with_timeout(backup_action.wait(), action_name)
     if backup_action.safe_data.get("status") != "completed":
         raise ActionError(backup_action)
-    return backup_action.results
+    return backup_action.safe_data
 
 
 def _fake_machine_public_address(machine):

@@ -83,7 +83,7 @@ class MysqlBackup(CharmBackup, metaclass=ABCMeta):
 
     def backup(self):
         action_output = check_output_unit_action(self.unit, self.backup_action_name, basedir=str(self.backup_basedir))
-        self.backup_filepath = Path(action_output.get("mysqldump-file"))
+        self.backup_filepath = Path(action_output.get("results", {}).get("mysqldump-file"))
 
     def download_backup(self, save_path: Path) -> Path:
         filename = self.backup_filepath.name
@@ -104,7 +104,7 @@ class EtcdBackup(CharmBackup):
 
     def backup(self):
         action_output = check_output_unit_action(self.unit, self.backup_action_name, target=str(self.backup_basedir))
-        self.backup_filepath = Path(action_output.get("snapshot").get("path"))
+        self.backup_filepath = Path(action_output.get("results", {}).get("snapshot", {}).get("path"))
 
 
 class PostgresqlBackup(CharmBackup):

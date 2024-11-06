@@ -1,42 +1,124 @@
-name: Check workflow running linter, unit and functional tests
+name: Tests
 
 on:
   workflow_call:
   workflow_dispatch:
   pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [master, main]
+    types: [ opened, synchronize, reopened ]
+    branches: [ master, main ]
     paths-ignore:
-      - "**.md"
-      - "**.rst"
+      - '**.md'
+      - '**.rst'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+      # We do not want to run multiple jobs for single PR.
+      group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
 
 jobs:
-  lint-unit:
-    uses: canonical/bootstack-actions/.github/workflows/lint-unit.yaml@v2
+  lint:
+    name: Linters
+    runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
         python-version: ["3.8", "3.10"]
-    with:
-      python-version: ${{ matrix.python-version }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install tox
+    - name: Run lint checkers
+      run: tox -e lint
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.10"]
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install tox
+    - name: Run unit tests
+      run: tox -e unit
+
+  snap-build:
+    name: Build snap
+    needs:
+      - lint
+      - unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0  # Complete git history is required to generate the version from git tags.
+      - name: Setup LXD
+        uses: canonical/setup-lxd@v0.1.1
+        with:
+          channel: latest/stable
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+      - name: Build snap
+        run: snapcraft --use-lxd
+      - name: Determine system architecture
+        run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
+      - name: Upload the built snap as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snap_${{ env.SYSTEM_ARCH }}
+          path: juju-backup-all_*.snap
 
   func:
-    uses: canonical/bootstack-actions/.github/workflows/func.yaml@v3
-    needs: lint-unit
-    strategy:
-      fail-fast: false
-      matrix:
-        command: ["make functional"]
-        juju-channel: ["3.4/stable"]
-    with:
-      command: ${{ matrix.command }}
-      juju-channel: ${{ matrix.juju-channel }}
-      runs-on: "['self-hosted', 'linux', 'x64', 'large', 'jammy']"  # Note(rgildein): The test needs more storage than the official GitHub runners offer.
-      nested-containers: false
-      provider: "lxd"
-      python-version: "3.10"
-      timeout-minutes: 120
+    name: Functional tests
+    needs: snap-build
+    runs-on: [self-hosted, Linux, amd64, large, jammy]  # Note(rgildein): The test needs more storage than the official GitHub runners offer.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Setup Juju 2.9/stable environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: lxd
+          juju-channel: 2.9/stable
+      - name: Remove tox install by actions-operator
+        run: sudo apt remove tox -y
+      - name: Install tox
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tox
+      - name: Determine system architecture
+        run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
+      - name: Download snap file artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: snap_${{ env.SYSTEM_ARCH }}
+      - name: Run functional tests
+        run: |
+          export TEST_SNAP="$(pwd)/$(ls | grep '.*juju-backup-all_.*\.snap$')"
+          echo "$TEST_SNAP"
+          sudo snap install $TEST_SNAP --dangerous
+          tox -e functional

@@ -108,15 +108,16 @@ class TestCheckOutputUnitAction(unittest.TestCase):
     @patch("jujubackupall.utils.run_async")
     def test_check_output_unit_action_success_no_params(self, mock_run_async: Mock, mock_wait_for: Mock):
         action_name = "my-action"
+        exp_data = {"status": "completed"}
         safe_data = dict(status="completed")
         mock_unit = Mock()
         mock_action = Mock()
         mock_action.safe_data = safe_data
         mock_run_async.return_value = mock_action
-        mock_run_async.return_value.results = "foo"
+        mock_run_async.return_value.safe_data = exp_data
         result = check_output_unit_action(mock_unit, action_name)
         self.assertEqual(mock_run_async.call_count, 2, "assert run_async called twice")
-        self.assertEqual(result, "foo")
+        self.assertEqual(result, exp_data)
         mock_unit.run_action.assert_called_once_with(action_name)
         mock_action.wait.assert_called_once()
 
@@ -124,16 +125,17 @@ class TestCheckOutputUnitAction(unittest.TestCase):
     @patch("jujubackupall.utils.run_async")
     def test_check_output_unit_action_success_with_params(self, mock_run_async: Mock, mock_wait_for: Mock):
         action_name = "my-action"
+        exp_data = {"status": "completed"}
         action_params = dict(param_one="hello", param_two="world")
         safe_data = dict(status="completed")
         mock_unit = Mock()
         mock_action = Mock()
         mock_action.safe_data = safe_data
         mock_run_async.return_value = mock_action
-        mock_run_async.return_value.results = "foo"
+        mock_run_async.return_value.safe_data = exp_data
         result = check_output_unit_action(mock_unit, action_name, **action_params)
         self.assertEqual(mock_run_async.call_count, 2, "assert run_async called twice")
-        self.assertEqual(result, "foo")
+        self.assertEqual(result, exp_data)
         mock_unit.run_action.assert_called_once_with(action_name, **action_params)
         mock_action.wait.assert_called_once()
 
