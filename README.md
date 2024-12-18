@@ -97,28 +97,12 @@ juju-backups/
 
 ## Development and Testing
 
-To set up development environment:
-
-```bash
-make install-dev
-. venv/bin/activate
-
-# if pre-commit hooks desired:
-pre-commit install
-```
-
 ### Functional tests
 
 To run functional tests:
 
 ```bash
-make functional
-```
-
-or
-
-```bash
-tox -e functional
+tox -e func
 ```
 
 Several environment variables are available for setting to help expedite testing.
@@ -142,13 +126,14 @@ to run the unit tests.
 To run unit tests:
 
 ```bash
-make unittests
+tox -e unit
 ```
 
 To run unit tests and also generate html coverage reports:
 
 ```bash
-make unit-coverage
+tox -e unit
+tox -e cover
 ```
 
 ## Building and Installing Snap Locally
@@ -156,7 +141,7 @@ make unit-coverage
 To build the snap locally, simply run:
 
 ```bash
-make snap
+snapcraft --use-lxd
 ```
 
 You can then install the locally built snap with:
@@ -168,5 +153,5 @@ sudo snap install --dangerous ./juju-backup-all_${VERSION}.snap
 To clean up the snapcraft build environment, run the following:
 
 ```bash
-make snap-clean
+snapcraft clean --use-lxd
 ```

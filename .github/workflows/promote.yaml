@@ -1,19 +1,20 @@
-name: Promote snap to other tracks and channels
+name: Promote snap to default track, standard risk levels.
 
 on:
   workflow_dispatch:
     inputs:
-      destination-channel:
-        description: 'Destination Channel, e.g. latest/candidate'
+      channel-promotion:
+        description: 'Channel Promotion, e.g. latest/edge -> latest/candidate'
         required: true
-      origin-channel:
-        description: 'Origin Channel, e.g. latest/edge'
-        required: true
+        type: choice
+        options:
+          - 'latest/edge -> latest/candidate'
+          - 'latest/candidate -> latest/stable'
 
 jobs:
   promote-snap:
     name: Promote snap
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Snapcraft install
@@ -21,6 +22,14 @@ jobs:
       - name: Get snap name
         id: snap
         run: echo "name=$(awk '/^name:/ {print $2}' snap/snapcraft.yaml)" >> "$GITHUB_OUTPUT"
+      - name: Set channels
+        id: set-channels
+        run: |
+          channel_promotion="${{ github.event.inputs.channel-promotion }}"
+          origin=$(echo "$channel_promotion" | sed 's/\s*->.*//')
+          destination=$(echo "$channel_promotion" | sed 's/.*->\s*//')
+          echo "destination-channel=$destination" >> $GITHUB_OUTPUT
+          echo "origin-channel=$origin" >> $GITHUB_OUTPUT
       - name: Snapcraft promote snap
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.STORE_LOGIN }}
@@ -30,5 +39,5 @@ jobs:
           #       refuse to non-interactively promote a snap from the edge
           #       channel if it is done without any branch qualifiers
           yes | snapcraft promote ${{ steps.snap.outputs.name }}  \
-          --from-channel ${{ github.event.inputs.origin-channel }} \
-          --to-channel ${{ github.event.inputs.destination-channel }}
+          --from-channel ${{ steps.set-channels.outputs.origin-channel }} \
+          --to-channel ${{ steps.set-channels.outputs.destination-channel }}
