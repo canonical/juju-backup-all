@@ -1,11 +1,11 @@
-name: Check workflow running linter, unit and functional tests
+name: Tests
 
 on:
   workflow_call:
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [master, main]
+    branches: [main]
     paths-ignore:
       - "**.md"
       - "**.rst"
@@ -15,28 +15,128 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-unit:
-    uses: canonical/bootstack-actions/.github/workflows/lint-unit.yaml@v2
+  lint:
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.10"]
-    with:
-      python-version: ${{ matrix.python-version }}
+        python-version: ["3.8", "3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Complete git history is required to generate the version from git tags.
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          python -m pip install --upgrade pip
+          # pin tox to the current major version to avoid
+          # workflows breaking all at once when a new major version is released.
+          python -m pip install 'tox<5'
+
+      - name: Run linters
+        run: tox -e lint
+
+  unit:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Complete git history is required to generate the version from git tags.
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          python -m pip install --upgrade pip
+          # pin tox to the current major version to avoid
+          # workflows breaking all at once when a new major version is released.
+          python -m pip install 'tox<5'
+
+      - name: Run linters
+        run: tox -e unit
+
+  build:
+    needs:
+      - lint
+      - unit
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [[ubuntu-22.04]]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Complete git history is required to generate the version from git tags.
+
+      - name: Verify snap builds successfully
+        id: build
+        uses: canonical/action-build@v1
+
+      - name: Determine system architecture
+        run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
+
+      - name: Upload the built snap
+        uses: actions/upload-artifact@v4
+        with:
+          name: snap_${{ env.SYSTEM_ARCH }}
+          path: ${{ steps.build.outputs.snap }}
 
   func:
-    uses: canonical/bootstack-actions/.github/workflows/func.yaml@v3
-    needs: lint-unit
+    needs:
+      - build
+    runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
       matrix:
-        command: ["make functional"]
+        runs-on: [['self-hosted', 'linux', 'x64', 'large', 'jammy']]
         juju-channel: ["3.4/stable"]
-    with:
-      command: ${{ matrix.command }}
-      juju-channel: ${{ matrix.juju-channel }}
-      runs-on: "['self-hosted', 'linux', 'x64', 'large', 'jammy']"  # Note(rgildein): The test needs more storage than the official GitHub runners offer.
-      nested-containers: false
-      provider: "lxd"
-      python-version: "3.10"
-      timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Complete git history is required to generate the version from git tags.
+
+      - name: Determine system architecture
+        run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
+
+      - name: Download the built snap
+        uses: actions/download-artifact@v4
+        with:
+          name: snap_${{ env.SYSTEM_ARCH }}
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Setup Juju environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: "lxd"
+          juju-channel: ${{ matrix.juju-channel }}
+          charmcraft-channel: "2.x/stable"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'tox<5'
+
+      - name: Run functional tests
+        run: |
+          export TEST_SNAP="$(pwd)/$(ls | grep '.*\.snap$')"
+          echo "$TEST_SNAP"
+          tox -e func
