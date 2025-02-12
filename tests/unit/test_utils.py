@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-""" Unit tests for utils.py """
+"""Unit tests for utils.py"""
 import unittest
 from concurrent.futures import TimeoutError
 from unittest.mock import Mock, patch

@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-""" Unit tests for cli.py """
+"""Unit tests for cli.py"""
 import unittest
 from collections import namedtuple
 from pathlib import Path

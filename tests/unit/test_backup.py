@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-""" Unit tests for backup.py """
+"""Unit tests for backup.py"""
 import json
 import unittest
 from pathlib import Path
