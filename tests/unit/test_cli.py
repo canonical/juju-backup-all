@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-""" Unit tests for cli.py """
+"""Unit tests for cli.py"""
 import argparse
 import unittest
 from io import StringIO
@@ -116,7 +116,7 @@ class TestMakeParser(unittest.TestCase):
         parser = make_cli_parser()
         with self.assertRaises(SystemExit):
             parser.parse_args(["--exclude-charm", "a-charm"])
-        self.assertRegexpMatches(mock_stderr.getvalue(), r"a-charm")
+        self.assertRegex(mock_stderr.getvalue(), r"a-charm")
 
 
 if __name__ == "__main__":
