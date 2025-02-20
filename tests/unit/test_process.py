@@ -29,7 +29,9 @@ class TestBackupProcessor(unittest.TestCase):
             SubtestCase(name="none excluded", input=[], expected=SUPPORTED_BACKUP_CHARMS),
             SubtestCase(name="all excluded", input=SUPPORTED_BACKUP_CHARMS, expected=[]),
             SubtestCase(
-                name="mysql-innodb excluded", input=["mysql-innodb-cluster"], expected=all_charms_but_mysql_innodb
+                name="mysql-innodb excluded",
+                input=["mysql-innodb-cluster"],
+                expected=all_charms_but_mysql_innodb,
             ),
         ]
         for test_case in test_cases:
@@ -130,7 +132,9 @@ class TestBackupProcessor(unittest.TestCase):
 
     @patch("jujubackupall.process.tracker")
     @patch("jujubackupall.process.JujuClientConfigBackup")
-    def test_process_backups_backup_juju_config(self, mock_juju_config_backup: Mock, mock_tracker: Mock):
+    def test_process_backups_backup_juju_config(
+        self, mock_juju_config_backup: Mock, mock_tracker: Mock
+    ):
         self.mock_config.all_controllers = False
         self.mock_config.use_current_controller = False
         self.mock_config.backup_controller = False
@@ -190,7 +194,9 @@ class TestControllerProcessor(unittest.TestCase):
 
     @patch("jujubackupall.process.tracker")
     @patch("jujubackupall.process.JujuControllerBackup", return_value=Mock())
-    def test_backup_controller_fails(self, mock_juju_controller_backup_class: Mock, mock_tracker: Mock):
+    def test_backup_controller_fails(
+        self, mock_juju_controller_backup_class: Mock, mock_tracker: Mock
+    ):
         controller_name = "my-controller"
         self.mock_controller.controller_name = controller_name
         mock_juju_controller_backup_inst = Mock()
@@ -202,14 +208,20 @@ class TestControllerProcessor(unittest.TestCase):
         controller_processor = self.create_controller_processor()
         controller_processor.backup_controller()
 
-        mock_tracker.add_error.assert_called_once_with(controller=controller_name, error_reason=str(juju_backup_error))
+        mock_tracker.add_error.assert_called_once_with(
+            controller=controller_name, error_reason=str(juju_backup_error)
+        )
 
     @patch("jujubackupall.process.ControllerProcessor._log")
     @patch("jujubackupall.process.ControllerProcessor.backup_apps")
     @patch("jujubackupall.process.connect_model")
     @patch("jujubackupall.process.run_async")
     def test_backup_models(
-        self, mock_run_async: Mock, mock_connect_model: Mock, mock_backup_apps: Mock, mock_log: Mock
+        self,
+        mock_run_async: Mock,
+        mock_connect_model: Mock,
+        mock_backup_apps: Mock,
+        mock_log: Mock,
     ):
         model_names = ["model1", "model2"]
         mock_run_async.return_value = model_names
@@ -221,7 +233,9 @@ class TestControllerProcessor(unittest.TestCase):
         print(mock_connect_model)
         mock_connect_model.assert_has_calls(connect_model_calls, any_order=True)
         self.assertEqual(
-            mock_backup_apps.call_count, len(model_names), "assert backup_apps called expected number of times"
+            mock_backup_apps.call_count,
+            len(model_names),
+            "assert backup_apps called expected number of times",
         )
 
     @patch("jujubackupall.process.ControllerProcessor.generate_full_backup_path")
@@ -258,14 +272,22 @@ class TestControllerProcessor(unittest.TestCase):
         ]
         mock_get_backup_instance.assert_has_calls(calls_get_backup_instance, any_order=True)
         mock_generate_full_backup_path.assert_called()
-        self.assertEqual(mock_get_leader.call_count, 1, "assert get_leader called once (for the 1 charm in scope)")
+        self.assertEqual(
+            mock_get_leader.call_count,
+            1,
+            "assert get_leader called once (for the 1 charm in scope)",
+        )
 
     @patch("jujubackupall.process.get_leader")
     @patch("jujubackupall.process.get_charm_backup_instance")
     @patch("jujubackupall.process.ControllerProcessor._log")
     @patch("jujubackupall.process.tracker")
     def test_backup_app_action_error(
-        self, mock_tracker: Mock, mock_log: Mock, mock_get_charm_backup_instance: Mock, mock_get_leader: Mock
+        self,
+        mock_tracker: Mock,
+        mock_log: Mock,
+        mock_get_charm_backup_instance: Mock,
+        mock_get_leader: Mock,
     ):
         model_name = "my-model"
         charm_name = "my-charm"
@@ -288,13 +310,19 @@ class TestControllerProcessor(unittest.TestCase):
         )
 
         mock_tracker.add_error.assert_called_once_with(
-            controller=controller_name, model=model_name, app=app_name, charm=charm_name, error_reason=str(action_error)
+            controller=controller_name,
+            model=model_name,
+            app=app_name,
+            charm=charm_name,
+            error_reason=str(action_error),
         )
 
     @patch("jujubackupall.process.get_leader")
     @patch("jujubackupall.process.ControllerProcessor._log")
     @patch("jujubackupall.process.tracker")
-    def test_backup_action_no_leader(self, mock_tracker: Mock, mock_log: Mock, mock_get_leader: Mock):
+    def test_backup_action_no_leader(
+        self, mock_tracker: Mock, mock_log: Mock, mock_get_leader: Mock
+    ):
         model_name = "my-model"
         charm_name = "my-charm"
         app_name = "my-app"
@@ -325,6 +353,10 @@ class TestControllerProcessor(unittest.TestCase):
         model_name = "my-model"
         self.mock_controller.controller_name = controller_name
         controller_processor = self.create_controller_processor()
-        actual_path = controller_processor.generate_full_backup_path(model_name=model_name, app_name=app_name)
-        expected_path = Path("{}/{}/{}/{}".format(self.base_output_path, controller_name, model_name, app_name))
+        actual_path = controller_processor.generate_full_backup_path(
+            model_name=model_name, app_name=app_name
+        )
+        expected_path = Path(
+            "{}/{}/{}/{}".format(self.base_output_path, controller_name, model_name, app_name)
+        )
         self.assertEqual(actual_path, expected_path)

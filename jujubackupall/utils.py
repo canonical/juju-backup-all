@@ -158,7 +158,9 @@ def ssh_run_on_unit(unit: Unit, command: str, user="ubuntu"):
 def ssh_run_on_machine(machine: Machine, command: str, user="ubuntu"):
     run_with_timeout(
         machine.ssh(command=command, user=user),
-        "machine ssh with command={} on machine {}".format(command, machine.safe_data.get("hostname")),
+        "machine ssh with command={} on machine {}".format(
+            command, machine.safe_data.get("hostname")
+        ),
     )
 
 
@@ -166,7 +168,9 @@ def scp_from_unit(unit: Unit, source: str, destination: str):
     _fake_machine_public_address(unit.machine)
     run_with_timeout(
         unit.scp_from(source=source, destination=destination),
-        "unit scp with source={}:{} and destination={}".format(unit.safe_data.get("name"), source, destination),
+        "unit scp with source={}:{} and destination={}".format(
+            unit.safe_data.get("name"), source, destination
+        ),
     )
 
 
@@ -183,7 +187,8 @@ def scp_from_machine(machine: Machine, source: str, destination: str):
 def backup_controller(controller: Controller) -> Tuple[Model, dict]:
     controller_model: Model = run_async(controller.get_model("controller"))
     return run_with_timeout(
-        controller_model.create_backup(), "controller backup on controller {}".format(controller.controller_name)
+        controller_model.create_backup(),
+        "controller backup on controller {}".format(controller.controller_name),
     )
 
 

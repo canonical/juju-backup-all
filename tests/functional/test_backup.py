@@ -30,13 +30,25 @@ async def test_build_and_deploy(ops_test):
     """Deploy all applications."""
 
     await ops_test.model.deploy(
-        "ch:mysql-innodb-cluster", application_name="mysql", series="jammy", channel="8.0/stable", num_units=3
+        "ch:mysql-innodb-cluster",
+        application_name="mysql",
+        series="jammy",
+        channel="8.0/stable",
+        num_units=3,
     )
     await ops_test.model.deploy(
-        "ch:postgresql", application_name="postgresql", series="jammy", channel="14/stable", num_units=1
+        "ch:postgresql",
+        application_name="postgresql",
+        series="jammy",
+        channel="14/stable",
+        num_units=1,
     )
-    await ops_test.model.deploy("ch:etcd", application_name="etcd", series="jammy", channel="stable", num_units=1)
-    await ops_test.model.deploy("ch:easyrsa", application_name="easyrsa", series="jammy", channel="stable", num_units=1)
+    await ops_test.model.deploy(
+        "ch:etcd", application_name="etcd", series="jammy", channel="stable", num_units=1
+    )
+    await ops_test.model.deploy(
+        "ch:easyrsa", application_name="easyrsa", series="jammy", channel="stable", num_units=1
+    )
     await ops_test.model.relate("etcd:certificates", "easyrsa:client")
 
     await ops_test.model.wait_for_idle(timeout=WAIT_TIMEOUT, status="active", check_freq=3)
@@ -110,7 +122,8 @@ def test_etcd_backup(backup_location, ops_test, tmp_path: Path):
 def test_juju_controller_backup(ops_test, tmp_path: Path):
     controller_name = ops_test.controller_name
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e etcd -e mysql-innodb-cluster -e postgresql -j", shell=True
+        f"juju-backup-all -o {tmp_path} -e etcd -e mysql-innodb-cluster -e postgresql -j",
+        shell=True,
     )
     output_dict = json.loads(output)
     expected_output_dir = tmp_path / controller_name
@@ -123,7 +136,8 @@ def test_juju_controller_backup(ops_test, tmp_path: Path):
 
 def test_juju_client_config_backup(tmp_path: Path):
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e etcd -e mysql-innodb-cluster -e postgresql -x", shell=True
+        f"juju-backup-all -o {tmp_path} -e etcd -e mysql-innodb-cluster -e postgresql -x",
+        shell=True,
     )
     output_dict = json.loads(output)
     expected_output_dir = tmp_path / "local_configs"

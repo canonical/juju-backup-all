@@ -91,7 +91,9 @@ class BackupProcessor:
             config_backup_dir_path = Path(self.config.output_dir)
             backup_juju_client_config_inst = JujuClientConfigBackup(config_backup_dir_path)
             resulting_backup_path = backup_juju_client_config_inst.backup()
-            tracker.add_config_backup(backup_juju_client_config_inst.client_config_name, str(resulting_backup_path))
+            tracker.add_config_backup(
+                backup_juju_client_config_inst.client_config_name, str(resulting_backup_path)
+            )
         for controller_name in self.controller_names:
             with connect_controller(controller_name) as controller:
                 logger.info("[{}] Processing backups.".format(controller.controller_name))
@@ -137,11 +139,15 @@ class ControllerProcessor:
 
     def backup_controller(self):
         controller_backup_save_path = self.base_output_path / self.controller.controller_name
-        controller_backup = JujuControllerBackup(controller=self.controller, save_path=controller_backup_save_path)
+        controller_backup = JujuControllerBackup(
+            controller=self.controller, save_path=controller_backup_save_path
+        )
         try:
             self._log("Backing up controller.")
             resulting_backup_path = controller_backup.backup()
-            tracker.add_controller_backup(self.controller.controller_name, str(resulting_backup_path))
+            tracker.add_controller_backup(
+                self.controller.controller_name, str(resulting_backup_path)
+            )
             self._log("Controller backed up to: {}".format(controller_backup_save_path))
         except JujuControllerBackupError as controller_backup_error:
             self._log("Juju controller backup failed: {}".format(controller_backup_error))
@@ -165,7 +171,9 @@ class ControllerProcessor:
             charm_url = app.data.get("charm-url")
             charm_name = parse_charm_name(charm_url)
             if charm_name in self.apps_to_backup:
-                self.backup_app(app=app, app_name=app_name, charm_name=charm_name, model_name=model_name)
+                self.backup_app(
+                    app=app, app_name=app_name, charm_name=charm_name, model_name=model_name
+                )
 
     def backup_app(self, app: Application, app_name: str, charm_name: str, model_name: str):
         try:
@@ -190,7 +198,9 @@ class ControllerProcessor:
                 download_path=str(resulting_backup_path),
             )
             self._log(
-                "Backups downloaded to {}".format(resulting_backup_path), app_name=app_name, model_name=model_name
+                "Backups downloaded to {}".format(resulting_backup_path),
+                app_name=app_name,
+                model_name=model_name,
             )
         except (ActionError, NoLeaderError, JujuError, JujuTimeoutError) as error:
             self._log(
@@ -212,6 +222,7 @@ class ControllerProcessor:
 
     def _log(self, msg, app_name=None, model_name=None, level=logging.INFO):
         formatted_msg = "[{}] {}".format(
-            " ".join([x for x in (self.controller.controller_name, model_name, app_name) if x]), msg
+            " ".join([x for x in (self.controller.controller_name, model_name, app_name) if x]),
+            msg,
         )
         logger.log(level=level, msg=formatted_msg)

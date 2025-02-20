@@ -77,7 +77,9 @@ class Cli:
     @staticmethod
     def _configure_juju_data():
         if os.environ.get("SNAP_REAL_HOME"):
-            os.environ["JUJU_DATA"] = "{}/.local/share/juju".format(os.environ.get("SNAP_REAL_HOME"))
+            os.environ["JUJU_DATA"] = "{}/.local/share/juju".format(
+                os.environ.get("SNAP_REAL_HOME")
+            )
 
     def _configure_global_vars(self):
         globals.async_timeout = self.config.timeout
@@ -87,11 +89,20 @@ def make_cli_parser():
     parser = argparse.ArgumentParser(description="Get a backup of all things Juju.")
     parser.add_argument("-o", "--output-directory", dest="output_dir", default="juju-backups")
     parser.add_argument(
-        "-e", "--exclude-charm", dest="excluded_charms", action="append", choices=SUPPORTED_BACKUP_CHARMS
+        "-e",
+        "--exclude-charm",
+        dest="excluded_charms",
+        action="append",
+        choices=SUPPORTED_BACKUP_CHARMS,
     )
-    parser.add_argument("-x", "--exclude-controller-backup", dest="backup_controller", action="store_false")
     parser.add_argument(
-        "-j", "--exclude-juju-client-config-backup", dest="backup_juju_client_config", action="store_false"
+        "-x", "--exclude-controller-backup", dest="backup_controller", action="store_false"
+    )
+    parser.add_argument(
+        "-j",
+        "--exclude-juju-client-config-backup",
+        dest="backup_juju_client_config",
+        action="store_false",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-c", "--controller", dest="controllers", action="append")
@@ -105,7 +116,12 @@ def make_cli_parser():
         type=str.upper,
     )
     parser.add_argument(
-        "-t", "--timeout", dest="timeout", default=600, help="timeout in seconds for long running commands.", type=int
+        "-t",
+        "--timeout",
+        dest="timeout",
+        default=600,
+        help="timeout in seconds for long running commands.",
+        type=int,
     )
     parser.add_argument(
         "--backup-location-on-postgresql",
