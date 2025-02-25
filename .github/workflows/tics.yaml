@@ -5,6 +5,12 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    branches: [ master, main ]
+    paths-ignore:
+      - '**.md'
+      - '**.rst'
 
 jobs:
   tics-analysis:
