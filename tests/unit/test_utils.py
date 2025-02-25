@@ -74,7 +74,9 @@ class TestGetAllControllers(unittest.TestCase):
         mock_juju_inst.get_controllers.return_value = controller_dict
         mock_juju_class.return_value = mock_juju_inst
         actual_controller_names = get_all_controllers()
-        self.assertEqual(len(actual_controller_names), 2, "assert excpected number of controller names returned")
+        self.assertEqual(
+            len(actual_controller_names), 2, "assert excpected number of controller names returned"
+        )
         self.assertIn(controller_name_1, actual_controller_names)
         self.assertIn(controller_name_2, actual_controller_names)
 
@@ -106,7 +108,9 @@ class TestGetLeader(unittest.TestCase):
 class TestCheckOutputUnitAction(unittest.TestCase):
     @patch("jujubackupall.utils.wait_for")
     @patch("jujubackupall.utils.run_async")
-    def test_check_output_unit_action_success_no_params(self, mock_run_async: Mock, mock_wait_for: Mock):
+    def test_check_output_unit_action_success_no_params(
+        self, mock_run_async: Mock, mock_wait_for: Mock
+    ):
         action_name = "my-action"
         safe_data = dict(status="completed")
         mock_unit = Mock()
@@ -122,7 +126,9 @@ class TestCheckOutputUnitAction(unittest.TestCase):
 
     @patch("jujubackupall.utils.wait_for")
     @patch("jujubackupall.utils.run_async")
-    def test_check_output_unit_action_success_with_params(self, mock_run_async: Mock, mock_wait_for: Mock):
+    def test_check_output_unit_action_success_with_params(
+        self, mock_run_async: Mock, mock_wait_for: Mock
+    ):
         action_name = "my-action"
         action_params = dict(param_one="hello", param_two="world")
         safe_data = dict(status="completed")
@@ -172,7 +178,8 @@ class TestBackupController(unittest.TestCase):
 
         mock_controller.get_model.assert_called_once_with("controller")
         mock_run_with_timeout.assert_called_once_with(
-            mock_model.create_backup(), "controller backup on controller {}".format(controller_name)
+            mock_model.create_backup(),
+            "controller backup on controller {}".format(controller_name),
         )
         self.assertEqual(actual_filename, local_backup_filename)
         self.assertEqual(actual_dict, expected_dict)
@@ -182,7 +189,9 @@ class TestRunWithTimeout(unittest.TestCase):
     @patch("jujubackupall.utils.globals")
     @patch("jujubackupall.utils.run_async")
     @patch("jujubackupall.utils.wait_for")
-    def test_ran_with_no_timeout(self, mock_wait_for: Mock, mock_run_async: Mock, mock_globals: Mock):
+    def test_ran_with_no_timeout(
+        self, mock_wait_for: Mock, mock_run_async: Mock, mock_globals: Mock
+    ):
         mock_coroutine = Mock()
         task = "some task"
         expected_result = "my result"

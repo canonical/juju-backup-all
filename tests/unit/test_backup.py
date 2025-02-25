@@ -51,7 +51,9 @@ class TestJujuControllerBackup(unittest.TestCase):
     def setUp(self):
         self.mock_controller = Mock()
         self.mock_save_path = Path("mypath")
-        self.controller_backup = JujuControllerBackup(controller=self.mock_controller, save_path=self.mock_save_path)
+        self.controller_backup = JujuControllerBackup(
+            controller=self.mock_controller, save_path=self.mock_save_path
+        )
 
     def get_juju_api_error(self):
         error_result = {
@@ -97,12 +99,17 @@ class TestJujuControllerBackup(unittest.TestCase):
         mock_shutil_move: Mock,
     ):
         results_dict = {"filename": "myfile", "controller-machine-id": "0"}
-        mock_backup_controller.side_effect = [self.get_juju_api_error(), ("local_filename", results_dict)]
+        mock_backup_controller.side_effect = [
+            self.get_juju_api_error(),
+            ("local_filename", results_dict),
+        ]
 
         result = self.controller_backup.backup()
 
         self.assertIsInstance(result, Path)
-        self.assertEqual(mock_backup_controller.call_count, 2, "assert backup_controller was called twice")
+        self.assertEqual(
+            mock_backup_controller.call_count, 2, "assert backup_controller was called twice"
+        )
 
     @patch("jujubackupall.backup.backup_controller")
     @patch("jujubackupall.backup.get_datetime_string")
@@ -126,7 +133,9 @@ class TestJujuClientConfigBackup(unittest.TestCase):
         mock_os.environ.get.return_value = None
         class_client_config_location = JujuClientConfigBackup.client_config_location
         juju_config_backup_inst = JujuClientConfigBackup(output_path)
-        self.assertEqual(juju_config_backup_inst.client_config_location, class_client_config_location)
+        self.assertEqual(
+            juju_config_backup_inst.client_config_location, class_client_config_location
+        )
 
     @patch("jujubackupall.backup.os")
     def test_juju_client_config_backup_create_with_environ(self, mock_os: Mock):
@@ -139,7 +148,9 @@ class TestJujuClientConfigBackup(unittest.TestCase):
     @patch("jujubackupall.backup.shutil")
     @patch("jujubackupall.backup.ensure_path_exists")
     @patch("jujubackupall.backup.os")
-    def test_juju_client_config_backup(self, mock_os: Mock, mock_ensure_path: Mock, mock_shutil: Mock):
+    def test_juju_client_config_backup(
+        self, mock_os: Mock, mock_ensure_path: Mock, mock_shutil: Mock
+    ):
         output_path = Path("my/path")
         mock_os.environ.get.return_value = None
         mock_shutil.make_archive.return_value = output_path / "archive.tar.gz"
@@ -220,8 +231,20 @@ class TestPostgresqlBackup(unittest.TestCase):
 
 class TestBackupTracker(unittest.TestCase):
     app_backups = [
-        dict(controller="controller1", model="model1", charm="charm1", app="app1", download_path="mypath1"),
-        dict(controller="controller2", model="model2", charm="charm2", app="app2", download_path="mypath2"),
+        dict(
+            controller="controller1",
+            model="model1",
+            charm="charm1",
+            app="app1",
+            download_path="mypath1",
+        ),
+        dict(
+            controller="controller2",
+            model="model2",
+            charm="charm2",
+            app="app2",
+            download_path="mypath2",
+        ),
     ]
 
     config_backups = [
@@ -271,22 +294,30 @@ class TestBackupTracker(unittest.TestCase):
             )
 
     def test_report_multi_apps(self):
-        expected_output = self.generate_expected_output(apps=self.app_backups, controllers=[], configs=[])
+        expected_output = self.generate_expected_output(
+            apps=self.app_backups, controllers=[], configs=[]
+        )
         self.add_app_backups_to_tracker(self.app_backups)
         self.assert_output(expected_output)
 
     def test_report_one_app(self):
-        expected_output = self.generate_expected_output(apps=self.app_backups[0:1], controllers=[], configs=[])
+        expected_output = self.generate_expected_output(
+            apps=self.app_backups[0:1], controllers=[], configs=[]
+        )
         self.add_app_backups_to_tracker(self.app_backups[0:1])
         self.assert_output(expected_output)
 
     def test_report_multi_controllers(self):
-        expected_output = self.generate_expected_output(apps=[], controllers=self.controller_backups, configs=[])
+        expected_output = self.generate_expected_output(
+            apps=[], controllers=self.controller_backups, configs=[]
+        )
         self.add_controller_backups_to_tracker(self.controller_backups)
         self.assert_output(expected_output)
 
     def test_multi_configs(self):
-        expected_output = self.generate_expected_output(apps=[], controllers=[], configs=self.config_backups)
+        expected_output = self.generate_expected_output(
+            apps=[], controllers=[], configs=self.config_backups
+        )
         self.add_config_backups_to_tracker(self.config_backups)
         self.assert_output(expected_output)
 
@@ -306,7 +337,8 @@ class TestBackupTracker(unittest.TestCase):
             dict(controller="app", app="some-app", error_reason="some other reason"),
         ]
         expected_output = json.dumps(
-            dict(controller_backups=[], config_backups=[], app_backups=[], errors=error_list), indent=2
+            dict(controller_backups=[], config_backups=[], app_backups=[], errors=error_list),
+            indent=2,
         )
         for error in error_list:
             self.tracker.add_error(**error)

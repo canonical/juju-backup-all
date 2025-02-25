@@ -82,13 +82,17 @@ class MysqlBackup(CharmBackup, metaclass=ABCMeta):
     backup_action_name = "mysqldump"
 
     def backup(self):
-        action_output = check_output_unit_action(self.unit, self.backup_action_name, basedir=str(self.backup_basedir))
+        action_output = check_output_unit_action(
+            self.unit, self.backup_action_name, basedir=str(self.backup_basedir)
+        )
         self.backup_filepath = Path(action_output.get("mysqldump-file"))
 
     def download_backup(self, save_path: Path) -> Path:
         filename = self.backup_filepath.name
         tmp_path = Path("/tmp") / filename
-        cp_chown_command = "sudo mv {} /tmp && sudo chown ubuntu:ubuntu {}".format(self.backup_filepath, tmp_path)
+        cp_chown_command = "sudo mv {} /tmp && sudo chown ubuntu:ubuntu {}".format(
+            self.backup_filepath, tmp_path
+        )
         ssh_run_on_unit(unit=self.unit, command=cp_chown_command)
         self.backup_filepath = tmp_path
         return super().download_backup(save_path)
@@ -103,7 +107,9 @@ class EtcdBackup(CharmBackup):
     backup_action_name = "snapshot"
 
     def backup(self):
-        action_output = check_output_unit_action(self.unit, self.backup_action_name, target=str(self.backup_basedir))
+        action_output = check_output_unit_action(
+            self.unit, self.backup_action_name, target=str(self.backup_basedir)
+        )
         self.backup_filepath = Path(action_output.get("snapshot").get("path"))
 
 
@@ -150,7 +156,11 @@ class JujuControllerBackup(BaseBackup):
         last_error = None
         for i in range(MAX_CONTROLLER_BACKUP_RETRIES):
             try:
-                logger.info("[{}] Attempt #{} for controller backup.".format(self.controller.controller_name, i + 1))
+                logger.info(
+                    "[{}] Attempt #{} for controller backup.".format(
+                        self.controller.controller_name, i + 1
+                    )
+                )
                 local_backup_filename, result_dict = backup_controller(self.controller)
                 break
             except JujuAPIError as juju_api_error:
@@ -189,11 +199,15 @@ class ClientConfigBackup(BaseBackup, metaclass=ABCMeta):
 
     def backup(self) -> Path:
         output_path = (
-            self.base_output_dir / "local_configs" / "{}-{}".format(self.client_config_name, get_datetime_string())
+            self.base_output_dir
+            / "local_configs"
+            / "{}-{}".format(self.client_config_name, get_datetime_string())
         )
         ensure_path_exists(output_path.parent)
         archive_path = shutil.make_archive(
-            base_name=str(output_path), format="gztar", root_dir=self.client_config_location.expanduser()
+            base_name=str(output_path),
+            format="gztar",
+            root_dir=self.client_config_location.expanduser(),
         )
         logger.info("[config] {} client config backed up.".format(self.client_config_name))
         return Path(archive_path).absolute()
@@ -239,7 +253,9 @@ class BackupTracker:
         self.app_backups: List[AppBackupEntry] = list()
         self.errors: List[Dict] = list()
 
-    def add_app_backup(self, controller: str, model: str, charm: str, app: str, download_path: str):
+    def add_app_backup(
+        self, controller: str, model: str, charm: str, app: str, download_path: str
+    ):
         app_backup = AppBackupEntry(
             controller=controller, model=model, charm=charm, app=app, download_path=download_path
         )
@@ -250,7 +266,9 @@ class BackupTracker:
         self.config_backups.append(config_backup_entry)
 
     def add_controller_backup(self, controller: str, download_path: str):
-        controller_backup_entry = ControllerBackupEntry(controller=controller, download_path=download_path)
+        controller_backup_entry = ControllerBackupEntry(
+            controller=controller, download_path=download_path
+        )
         self.controller_backups.append(controller_backup_entry)
 
     def add_error(self, **kwargs):
@@ -286,7 +304,8 @@ class BackupTracker:
               "model": "my-model2",
               "charm": "mysql-innodb-cluster",
               "app": "mysql",
-              "download_path": "/home/user/juju-backups/my-controller/my-model2/mysql/mysqldump-all-databases.gz"
+              "download_path":
+                "/home/user/juju-backups/my-controller/my-model2/mysql/mysqldump-all-databases.gz"
             }
           ]
           "errors":  [
