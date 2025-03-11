@@ -67,7 +67,7 @@ apps:
     command: bin/juju-backup-all
     environment:
       PATH: $SNAP/bin:$SNAP/usr/bin:$PATH
-      PYTHONPATH: $PYTHONPATH:$SNAP/lib/python3.8/site-packages
+      PYTHONPATH: $PYTHONPATH:$SNAP/lib/python3.12/site-packages
     plugs:
       - network
       - home
