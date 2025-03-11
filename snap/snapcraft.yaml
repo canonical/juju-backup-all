@@ -77,14 +77,10 @@ apps:
 parts:
   juju-backup-all:
     plugin: python
-    python-packages:
-      - .
     source: .
     source-type: git
-    override-build: |
-      craftctl default
-      echo "Version: $(python3 setup.py --version)"
-      craftctl set version="$(python3 setup.py --version)"
+    build-packages: # required for finding version
+      - python3-setuptools-scm
     stage-packages:
       - libpython3-stdlib
       - python3-pip
@@ -94,3 +90,7 @@ parts:
       - python3-setuptools
       - python3-pkg-resources
       - openssh-client
+    override-build: |
+      craftctl default
+      echo "Version: $(python3 setup.py --version)"
+      craftctl set version="$(python3 setup.py --version)"
