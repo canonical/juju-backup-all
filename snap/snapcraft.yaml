@@ -82,9 +82,9 @@ parts:
     source: .
     source-type: git
     override-build: |
-      snapcraftctl build
+      craftctl default
       echo "Version: $(python3 setup.py --version)"
-      snapcraftctl set-version "$(python3 setup.py --version)"
+      craftctl set version="$(python3 setup.py --version)"
     stage-packages:
       - libpython3-stdlib
       - python3-pip
