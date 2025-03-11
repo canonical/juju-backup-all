@@ -1,5 +1,5 @@
 name: juju-backup-all
-base: core20
+base: core24
 adopt-info: juju-backup-all
 summary: Tool for backing up charms, local juju configs, and juju controllers.
 description: |
