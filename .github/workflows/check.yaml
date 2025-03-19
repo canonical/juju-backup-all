@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10']
+        python-version: ['3.8', '3.10', '3.12']
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v4
@@ -91,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [['self-hosted', 'linux', 'x64', 'large', 'jammy']]
+        runs-on: [[ubuntu-24.04]]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -117,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [['self-hosted', 'linux', 'x64', 'large', 'jammy']]
+        runs-on: [[ubuntu-24.04]]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -135,6 +135,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+
+      - name: Setup Juju 3.6/stable environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: lxd
+          juju-channel: 3.6/stable
 
       - name: Install dependencies
         run: |
