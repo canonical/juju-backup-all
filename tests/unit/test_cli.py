@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Unit tests for cli.py"""
+"""Unit tests for cli.py."""
 import argparse
 import unittest
 from io import StringIO

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Test juju-backup-all on multi-model controller"""
+"""Test juju-backup-all on multi-model controller."""
 
 import glob
 import json
@@ -28,7 +28,6 @@ WAIT_TIMEOUT = 20 * 60
 @pytest.mark.skip_if_deployed
 async def test_build_and_deploy(ops_test):
     """Deploy all applications."""
-
     await ops_test.model.deploy(
         "ch:mysql-innodb-cluster",
         application_name="mysql",

@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Unit tests for cli.py"""
+"""Unit tests for cli.py."""
 import unittest
 from collections import namedtuple
 from pathlib import Path
@@ -172,7 +172,7 @@ class TestControllerProcessor(unittest.TestCase):
 
     @staticmethod
     def create_app_tuple(app_name):
-        """Helper function that takes in an app name and returns a tuple with name and properly set up mock"""
+        """Create a tuple of app name and its mock."""
         mock_app = Mock()
         mock_app.data.get.return_value = "cs:{}-1".format(app_name)
         return app_name, mock_app
