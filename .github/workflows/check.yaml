@@ -1,3 +1,8 @@
+# This file is centrally managed as a template file in https://github.com/canonical/solutions-engineering-automation
+# To update the file:
+# - Edit it in the canonical/solutions-engineering-automation repository.
+# - Open a PR with the changes.
+# - When the PR merges, the soleng-terraform bot will open a PR to the target repositories with the changes.
 name: Tests
 
 on:
@@ -16,24 +21,21 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.8", "3.10", "3.12"]
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Complete git history is required to generate the version from git tags.
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |
           sudo apt update
+          sudo apt install -y yamllint
           python -m pip install --upgrade pip
           # pin tox to the current major version to avoid
           # workflows breaking all at once when a new major version is released.
@@ -42,37 +44,49 @@ jobs:
       - name: Run linters
         run: tox -e lint
 
+      - name: Lint yaml files
+        run: |
+          yamllint .yamllint snap/snapcraft.yaml
+
   unit:
-    runs-on: ubuntu-24.04
+    name: Unit
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.10", "3.12"]
+        python-version: ['3.8', '3.10', '3.12']
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Complete git history is required to generate the version from git tags.
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          python -m pip install --upgrade pip
-          # pin tox to the current major version to avoid
-          # workflows breaking all at once when a new major version is released.
-          python -m pip install 'tox<5'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install 'tox<5'
 
-      - name: Run linters
-        run: tox -e unit
+    - name: Run unit tests
+      run: tox -e unit
+
+    - name: Determine system architecture
+      run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
+
+    - name: Upload Unit Test Coverage File
+      uses: actions/upload-artifact@v4
+      with:
+        include-hidden-files: true
+        if-no-files-found: ignore
+        name: coverage-unit-${{ matrix.python-version }}-${{ env.SYSTEM_ARCH }}
+        path: .coverage-unit
 
   build:
     needs:
       - lint
-      - unit
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
@@ -103,8 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [['self-hosted', 'linux', 'x64', 'large', 'jammy']]
-        juju-channel: ["3.4/stable"]
+        runs-on: [[ubuntu-24.04]]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -113,30 +126,90 @@ jobs:
       - name: Determine system architecture
         run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
 
-      - name: Download the built snap
+      - name: Download snap file artifact
         uses: actions/download-artifact@v4
         with:
           name: snap_${{ env.SYSTEM_ARCH }}
 
-      - name: Set up Python 3.12
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.10"
 
-      - name: Setup Juju environment
+      - name: Setup Juju 3.6/stable environment
         uses: charmed-kubernetes/actions-operator@main
         with:
-          provider: "lxd"
-          juju-channel: ${{ matrix.juju-channel }}
-          charmcraft-channel: "2.x/stable"
+          provider: lxd
+          juju-channel: 3.6/stable
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install 'tox<5'
 
-      - name: Run functional tests
+      - name: Run func tests
         run: |
-          export TEST_SNAP="$(pwd)/$(ls | grep '.*\.snap$')"
+          export TEST_SNAP="$(pwd)/$(ls | grep '.*_.*\.snap$')"
           echo "$TEST_SNAP"
           tox -e func
+
+      - name: Upload Functional Test Coverage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          if-no-files-found: ignore
+          name: coverage-functional-${{ env.SYSTEM_ARCH }}
+          path: .coverage-func
+
+  tics-analysis:
+    runs-on: ubuntu-22.04
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: func
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install coverage tools
+        run: |
+          pip install coverage
+
+      - name: Determine system architecture
+        run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
+
+      - name: Download Coverage Files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*-${{ env.SYSTEM_ARCH }}
+          merge-multiple: true
+          path: artifacts/
+        continue-on-error: true
+
+      - name: Merge coverage reports
+        run: |
+          # Create the path that is expected to have a coverage.xml for tics
+          mkdir -p tests/report/
+
+          coverage_files=(./artifacts/.coverage*)
+
+          if [ -e "${coverage_files[0]}" ]; then
+            echo "Merging coverage files: ${coverage_files[*]}"
+            coverage combine "${coverage_files[@]}"
+            coverage xml -o tests/report/coverage.xml
+          else
+            echo "No coverage files found, skipping merge"
+            # Create an empty file to avoid downstream failure
+            touch tests/report/coverage.xml
+          fi
+
+      - name: Run TICS analysis
+        uses: tiobe/tics-github-action@v3
+        with:
+          mode: qserver
+          project: juju-backup-all
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+          branchdir: ${{ github.workspace }}
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true

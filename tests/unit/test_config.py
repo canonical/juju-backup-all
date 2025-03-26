@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Unit tests for config.py"""
+"""Unit tests for config.py."""
 import unittest
 
 from jujubackupall.config import Config

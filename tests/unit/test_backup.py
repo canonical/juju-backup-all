@@ -1,9 +1,9 @@
 #!/usr/bin/python3
-"""Unit tests for backup.py"""
+"""Unit tests for backup.py."""
 import json
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, patch
 
 from juju.errors import JujuAPIError
 
