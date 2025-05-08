@@ -104,3 +104,6 @@ directory = "tests/report/html"
 
 [tool.coverage.xml]
 output = "tests/report/coverage.xml"
+
+[tool.pytest.ini_options]
+tmp_path_retention_policy = "none"
