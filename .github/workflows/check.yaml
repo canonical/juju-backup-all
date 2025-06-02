@@ -206,6 +206,9 @@ jobs:
 
       # Install everything from all requirements.txt files otherwise TICS errors.
       - name: Install all snap dependencies
+        env:
+          # to ensure that zaza installs correctly
+          TEST_JUJU3: "1"
         run: |
           for f in $(find -name '*requirements.txt'); do
               echo "${f}"
