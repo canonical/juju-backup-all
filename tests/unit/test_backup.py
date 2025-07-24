@@ -238,7 +238,9 @@ class TestPostgresqlBackup(unittest.TestCase):
         postgresql_backup_inst.backup()
         self.assertEqual(postgresql_backup_inst.backup_filepath, Path(expected_path_string))
         mock_ssh_run_on_unit.assert_called_with(
-            unit=mock_unit, command=f"sudo -u postgres pg_dumpall | gzip > {expected_path_string}"
+            unit=mock_unit,
+            command=f"sudo -u postgres pg_dumpall | gzip > {expected_path_string}",
+            timeout=DEFAULT_TASK_TIMEOUT,
         )
 
 
