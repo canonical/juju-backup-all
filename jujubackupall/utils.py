@@ -90,9 +90,9 @@ def get_datetime_string() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
 
-def check_output_unit_action(unit: Unit, action_name: str, **params) -> dict:
+def check_output_unit_action(unit: Unit, action_name: str, timeout: int, **params) -> dict:
     backup_action: Action = run_async(unit.run_action(action_name, **params))
-    run_with_timeout(backup_action.wait(), action_name)
+    run_with_timeout(backup_action.wait(), action_name, timeout)
     if backup_action.safe_data.get("status") != "completed":
         raise ActionError(backup_action)
     return backup_action.results
@@ -147,39 +147,44 @@ def _fake_machine_public_address(machine):
         addresses.insert(0, public_addr)
 
 
-def ssh_run_on_unit(unit: Unit, command: str, user="ubuntu"):
+def ssh_run_on_unit(unit: Unit, command: str, timeout: int, user="ubuntu"):
     run_with_timeout(
         unit.ssh(command=command, user=user),
         "unit ssh with command={} on unit {}".format(command, unit.safe_data.get("name")),
+        timeout,
     )
 
 
-def ssh_run_on_machine(machine: Machine, command: str, user="ubuntu"):
+def ssh_run_on_machine(machine: Machine, command: str, timeout: int, user="ubuntu"):
     run_with_timeout(
         machine.ssh(command=command, user=user),
         "machine ssh with command={} on machine {}".format(
-            command, machine.safe_data.get("hostname")
+            command,
+            machine.safe_data.get("hostname"),
         ),
+        timeout,
     )
 
 
-def scp_from_unit(unit: Unit, source: str, destination: str):
+def scp_from_unit(unit: Unit, source: str, destination: str, timeout: int):
     _fake_machine_public_address(unit.machine)
     run_with_timeout(
         unit.scp_from(source=source, destination=destination),
         "unit scp with source={}:{} and destination={}".format(
             unit.safe_data.get("name"), source, destination
         ),
+        timeout,
     )
 
 
-def scp_from_machine(machine: Machine, source: str, destination: str):
+def scp_from_machine(machine: Machine, source: str, destination: str, timeout: int):
     _fake_machine_public_address(machine)
     run_with_timeout(
         machine.scp_from(source=source, destination=destination),
         "machine scp with source={}:{} and destination={}".format(
             machine.safe_data.get("hostname"), source, destination
         ),
+        timeout,
     )
 
 
@@ -188,7 +193,7 @@ def backup_controller(controller: Controller, timeout: int) -> Tuple[Model, dict
     return run_with_timeout(
         controller_model.create_backup(),
         f"controller backup on controller {controller.controller_name}",
-        timeout=timeout,
+        timeout,
     )
 
 

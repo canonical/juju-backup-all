@@ -271,6 +271,7 @@ class TestControllerProcessor(unittest.TestCase):
                 backup_location_on_postgresql=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
                 backup_location_on_mysql=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
                 backup_location_on_etcd=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+                timeout=ANY,
             ),
         ]
         mock_get_backup_instance.assert_has_calls(calls_get_backup_instance, any_order=True)

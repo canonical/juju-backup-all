@@ -31,7 +31,7 @@ from juju.controller import Controller
 from juju.errors import JujuAPIError
 from juju.unit import Unit
 
-from jujubackupall.constants import MAX_CONTROLLER_BACKUP_RETRIES
+from jujubackupall.constants import DEFAULT_TASK_TIMEOUT, MAX_CONTROLLER_BACKUP_RETRIES
 from jujubackupall.errors import JujuControllerBackupError
 from jujubackupall.utils import (
     backup_controller,
@@ -58,9 +58,10 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
     charm_name: str = NotImplemented
     _backup_filepath: Path = None
 
-    def __init__(self, unit: Unit, backup_basedir: Path):
+    def __init__(self, unit: Unit, backup_basedir: Path, timeout: int = DEFAULT_TASK_TIMEOUT):
         self.unit = unit
         self.backup_basedir = backup_basedir
+        self.timeout = timeout
 
     @property
     def backup_filepath(self):
@@ -72,9 +73,14 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
 
     def download_backup(self, save_path: Path) -> Path:
         ensure_path_exists(path=save_path)
-        scp_from_unit(unit=self.unit, source=str(self.backup_filepath), destination=str(save_path))
+        scp_from_unit(
+            unit=self.unit,
+            source=str(self.backup_filepath),
+            destination=str(save_path),
+            timeout=self.timeout,
+        )
         rm_command = "sudo rm {}".format(self.backup_filepath)
-        ssh_run_on_unit(unit=self.unit, command=rm_command)
+        ssh_run_on_unit(unit=self.unit, command=rm_command, timeout=self.timeout)
         return (save_path / self.backup_filepath.name).absolute()
 
 
@@ -83,7 +89,7 @@ class MysqlBackup(CharmBackup, metaclass=ABCMeta):
 
     def backup(self):
         action_output = check_output_unit_action(
-            self.unit, self.backup_action_name, basedir=str(self.backup_basedir)
+            self.unit, self.backup_action_name, self.timeout, basedir=str(self.backup_basedir)
         )
         self.backup_filepath = Path(action_output.get("mysqldump-file"))
 
@@ -93,7 +99,7 @@ class MysqlBackup(CharmBackup, metaclass=ABCMeta):
         cp_chown_command = "sudo mv {} /tmp && sudo chown ubuntu:ubuntu {}".format(
             self.backup_filepath, tmp_path
         )
-        ssh_run_on_unit(unit=self.unit, command=cp_chown_command)
+        ssh_run_on_unit(unit=self.unit, command=cp_chown_command, timeout=self.timeout)
         self.backup_filepath = tmp_path
         return super().download_backup(save_path)
 
@@ -108,7 +114,7 @@ class EtcdBackup(CharmBackup):
 
     def backup(self):
         action_output = check_output_unit_action(
-            self.unit, self.backup_action_name, target=str(self.backup_basedir)
+            self.unit, self.backup_action_name, self.timeout, target=str(self.backup_basedir)
         )
         self.backup_filepath = Path(action_output.get("snapshot").get("path"))
 
@@ -250,7 +256,7 @@ class ControllerBackupEntry:
 class BackupTracker:
     """Class to keep track of and output successful and failed backups."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.controller_backups: List[ControllerBackupEntry] = list()
         self.config_backups: List[ConfigBackupEntry] = list()
         self.app_backups: List[AppBackupEntry] = list()
@@ -335,13 +341,18 @@ def get_charm_backup_instance(
     backup_location_on_postgresql: Path,
     backup_location_on_mysql: Path,
     backup_location_on_etcd: Path,
+    timeout: int,
 ) -> CharmBackupType:
     if charm_name == MysqlInnodbBackup.charm_name:
-        return MysqlInnodbBackup(unit=unit, backup_basedir=backup_location_on_mysql)
+        return MysqlInnodbBackup(
+            unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout
+        )
     if charm_name == EtcdBackup.charm_name:
-        return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd)
+        return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd, timeout=timeout)
     if charm_name == PostgresqlBackup.charm_name:
-        return PostgresqlBackup(unit=unit, backup_basedir=backup_location_on_postgresql)
+        return PostgresqlBackup(
+            unit=unit, backup_basedir=backup_location_on_postgresql, timeout=timeout
+        )
     if charm_name == SwiftBackup.charm_name:  # Not implemented
-        return SwiftBackup(unit=unit, backup_basedir="/home/ubuntu")
+        return SwiftBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
     raise Exception("{} is not a supported charm.".format(charm_name))

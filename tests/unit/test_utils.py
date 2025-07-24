@@ -2,7 +2,7 @@
 """Unit tests for utils.py."""
 import unittest
 from concurrent.futures import TimeoutError
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from jujubackupall.errors import ActionError, JujuTimeoutError, NoLeaderError
 from jujubackupall.utils import (
@@ -118,7 +118,7 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         mock_action.safe_data = safe_data
         mock_run_async.return_value = mock_action
         mock_run_async.return_value.results = "foo"
-        result = check_output_unit_action(mock_unit, action_name)
+        result = check_output_unit_action(mock_unit, action_name, ANY)
         self.assertEqual(mock_run_async.call_count, 2, "assert run_async called twice")
         self.assertEqual(result, "foo")
         mock_unit.run_action.assert_called_once_with(action_name)
@@ -137,7 +137,7 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         mock_action.safe_data = safe_data
         mock_run_async.return_value = mock_action
         mock_run_async.return_value.results = "foo"
-        result = check_output_unit_action(mock_unit, action_name, **action_params)
+        result = check_output_unit_action(mock_unit, action_name, ANY, **action_params)
         self.assertEqual(mock_run_async.call_count, 2, "assert run_async called twice")
         self.assertEqual(result, "foo")
         mock_unit.run_action.assert_called_once_with(action_name, **action_params)
@@ -155,7 +155,7 @@ class TestCheckOutputUnitAction(unittest.TestCase):
         mock_action.safe_data = safe_data
         mock_run_async.return_value = mock_action
         with self.assertRaises(ActionError) as context:
-            check_output_unit_action(mock_unit, action_name)
+            check_output_unit_action(mock_unit, action_name, ANY)
         self.assertTrue(failure_status in str(context.exception))
         self.assertTrue(context.exception.results(), failure_results)
 

@@ -59,7 +59,7 @@ class JujuModel(NamedTuple):
 
 
 class BackupProcessor:
-    _controller_names = None
+    _controller_names: List[str] = None
 
     def __init__(self, config: Config):
         self.config = config
@@ -189,6 +189,7 @@ class ControllerProcessor:
                 backup_location_on_postgresql=self.backup_location_on_postgresql,
                 backup_location_on_mysql=self.backup_location_on_mysql,
                 backup_location_on_etcd=self.backup_location_on_etcd,
+                timeout=self.timeout,
             )
             self._log("Backing up app.", app_name=app_name, model_name=model_name)
             charm_backup_instance.backup()
