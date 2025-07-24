@@ -22,7 +22,6 @@ import logging
 import os
 from pathlib import Path
 
-from jujubackupall import globals
 from jujubackupall.config import Config
 from jujubackupall.constants import (
     DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT,
@@ -43,7 +42,6 @@ class Cli:
     def run(self):
         self._configure_logging()
         self._configure_juju_data()
-        self._configure_global_vars()
         backup_processor = BackupProcessor(self.config)
         backup_report = backup_processor.process_backups()
         print(backup_report)
@@ -81,8 +79,6 @@ class Cli:
                 os.environ.get("SNAP_REAL_HOME")
             )
 
-    def _configure_global_vars(self):
-        globals.async_timeout = self.config.timeout
 
 
 def make_cli_parser():

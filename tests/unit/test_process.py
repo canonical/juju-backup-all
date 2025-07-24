@@ -168,6 +168,7 @@ class TestControllerProcessor(unittest.TestCase):
             backup_location_on_postgresql=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
             backup_location_on_mysql=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
             backup_location_on_etcd=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+            timeout=ANY,
         )
 
     @staticmethod
@@ -188,7 +189,9 @@ class TestControllerProcessor(unittest.TestCase):
         controller_processor.backup_controller()
 
         mock_juju_controller_backup_class.assert_called_with(
-            controller=self.mock_controller, save_path=(self.base_output_path / controller_name)
+            controller=self.mock_controller,
+            save_path=(self.base_output_path / controller_name),
+            timeout=ANY,
         )
         mock_juju_controller_backup_inst.backup.assert_called_once()
 

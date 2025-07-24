@@ -138,10 +138,11 @@ class SwiftBackup(CharmBackup):
 
 
 class JujuControllerBackup(BaseBackup):
-    def __init__(self, controller: Controller, save_path=Path()):
+    def __init__(self, controller: Controller, save_path: Path = Path(), timeout: int = None):
         super().__init__()
         self.controller = controller
         self.save_path = save_path
+        self.timeout = timeout
 
     def backup(self) -> Path:
         """Run `juju create-backup` against Juju controller.
@@ -161,7 +162,9 @@ class JujuControllerBackup(BaseBackup):
                         self.controller.controller_name, i + 1
                     )
                 )
-                local_backup_filename, result_dict = backup_controller(self.controller)
+                local_backup_filename, result_dict = backup_controller(
+                    self.controller, timeout=self.timeout
+                )
                 break
             except JujuAPIError as juju_api_error:
                 error_msg = "[{}] Attempt #{} Encountered controller backup error: {}".format(

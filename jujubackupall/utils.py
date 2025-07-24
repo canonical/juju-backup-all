@@ -32,7 +32,6 @@ from juju.machine import Machine
 from juju.model import Model
 from juju.unit import Unit
 
-from jujubackupall import globals
 from jujubackupall.async_handlers import run_async
 from jujubackupall.constants import MAX_FRAME_SIZE
 from jujubackupall.errors import ActionError, JujuTimeoutError, NoLeaderError
@@ -184,17 +183,18 @@ def scp_from_machine(machine: Machine, source: str, destination: str):
     )
 
 
-def backup_controller(controller: Controller) -> Tuple[Model, dict]:
+def backup_controller(controller: Controller, timeout: int) -> Tuple[Model, dict]:
     controller_model: Model = run_async(controller.get_model("controller"))
     return run_with_timeout(
         controller_model.create_backup(),
-        "controller backup on controller {}".format(controller.controller_name),
+        f"controller backup on controller {controller.controller_name}",
+        timeout=timeout,
     )
 
 
-def run_with_timeout(coroutine: Coroutine, task: str):
-    timeout = globals.async_timeout
+def run_with_timeout(coroutine: Coroutine, task: str, timeout: int):
+    """Run an asyncio coroutine with an explicit timeout."""
     try:
         return run_async(wait_for(coroutine, timeout))
     except (AIOTimeoutError, CFTimeoutError):
-        raise JujuTimeoutError("Task '{}' timed out (timeout={}).".format(task, timeout))
+        raise JujuTimeoutError(f"Task '{task}' timed out (timeout={timeout}).")
