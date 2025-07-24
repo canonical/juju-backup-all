@@ -190,9 +190,7 @@ class TestBackupController(unittest.TestCase):
 class TestRunWithTimeout(unittest.TestCase):
     @patch("jujubackupall.utils.run_async")
     @patch("jujubackupall.utils.wait_for")
-    def test_ran_with_no_timeout(
-        self, mock_wait_for: Mock, mock_run_async: Mock
-    ):
+    def test_ran_with_no_timeout(self, mock_wait_for: Mock, mock_run_async: Mock):
         mock_coroutine = Mock()
         task = "some task"
         expected_result = "my result"

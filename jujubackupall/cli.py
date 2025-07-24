@@ -80,7 +80,6 @@ class Cli:
             )
 
 
-
 def make_cli_parser():
     parser = argparse.ArgumentParser(description="Get a backup of all things Juju.")
     parser.add_argument("-o", "--output-directory", dest="output_dir", default="juju-backups")
