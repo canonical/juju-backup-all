@@ -27,6 +27,7 @@ from jujubackupall.constants import (
     DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT,
     DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT,
     DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT,
+    DEFAULT_TASK_TIMEOUT,
     SUPPORTED_BACKUP_CHARMS,
 )
 from jujubackupall.process import BackupProcessor
@@ -114,7 +115,7 @@ def make_cli_parser():
         "-t",
         "--timeout",
         dest="timeout",
-        default=600,
+        default=DEFAULT_TASK_TIMEOUT,
         help="timeout in seconds for long running commands.",
         type=int,
     )
