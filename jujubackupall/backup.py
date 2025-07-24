@@ -144,7 +144,9 @@ class SwiftBackup(CharmBackup):
 
 
 class JujuControllerBackup(BaseBackup):
-    def __init__(self, controller: Controller, save_path: Path = Path(), timeout: int = None):
+    def __init__(
+        self, controller: Controller, save_path: Path = Path(), timeout: int = DEFAULT_TASK_TIMEOUT
+    ):
         super().__init__()
         self.controller = controller
         self.save_path = save_path
