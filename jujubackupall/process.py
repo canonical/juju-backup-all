@@ -59,7 +59,7 @@ class JujuModel(NamedTuple):
 
 
 class BackupProcessor:
-    _controller_names = None
+    _controller_names: List[str] = None
 
     def __init__(self, config: Config):
         self.config = config
@@ -104,6 +104,7 @@ class BackupProcessor:
                     Path(self.config.backup_location_on_postgresql),
                     Path(self.config.backup_location_on_mysql),
                     Path(self.config.backup_location_on_etcd),
+                    timeout=self.config.timeout,
                 )
                 controller_processor.backup_models(omit_models=omit_models)
                 if self.config.backup_controller:
@@ -120,6 +121,7 @@ class ControllerProcessor:
         backup_location_on_postgresql: Path,
         backup_location_on_mysql: Path,
         backup_location_on_etcd: Path,
+        timeout: int,
     ):
         """Process all backups within a connected Juju controller.
 
@@ -136,11 +138,14 @@ class ControllerProcessor:
         self.backup_location_on_postgresql = backup_location_on_postgresql
         self.backup_location_on_mysql = backup_location_on_mysql
         self.backup_location_on_etcd = backup_location_on_etcd
+        self.timeout = timeout
 
     def backup_controller(self):
         controller_backup_save_path = self.base_output_path / self.controller.controller_name
         controller_backup = JujuControllerBackup(
-            controller=self.controller, save_path=controller_backup_save_path
+            controller=self.controller,
+            save_path=controller_backup_save_path,
+            timeout=self.timeout,
         )
         try:
             self._log("Backing up controller.")
@@ -184,6 +189,7 @@ class ControllerProcessor:
                 backup_location_on_postgresql=self.backup_location_on_postgresql,
                 backup_location_on_mysql=self.backup_location_on_mysql,
                 backup_location_on_etcd=self.backup_location_on_etcd,
+                timeout=self.timeout,
             )
             self._log("Backing up app.", app_name=app_name, model_name=model_name)
             charm_backup_instance.backup()

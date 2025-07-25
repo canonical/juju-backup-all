@@ -3,7 +3,7 @@
 import json
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from juju.errors import JujuAPIError
 
@@ -21,6 +21,7 @@ from jujubackupall.constants import (
     DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT,
     DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT,
     DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT,
+    DEFAULT_TASK_TIMEOUT,
     MAX_CONTROLLER_BACKUP_RETRIES,
 )
 from jujubackupall.errors import JujuControllerBackupError
@@ -43,6 +44,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                     Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
                     Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
                     Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+                    ANY,
                 )
                 self.assertIsInstance(backup_instance, expected_backup_class)
 
@@ -81,7 +83,9 @@ class TestJujuControllerBackup(unittest.TestCase):
 
         return_path = self.controller_backup.backup()
 
-        mock_backup_controller.assert_called_once_with(self.controller_backup.controller)
+        mock_backup_controller.assert_called_once_with(
+            self.controller_backup.controller, timeout=ANY
+        )
         mock_shutil_move.assert_called_once_with(local_backup_filename, return_path)
         mock_path_exists.assert_called_once_with(self.controller_backup.save_path)
         mock_get_datetime_string.assert_called_once()
@@ -173,7 +177,10 @@ class TestMysqlBackup(unittest.TestCase):
         mysql_innodb_backup.backup()
         self.assertEqual(mysql_innodb_backup.backup_filepath, Path(mysql_dumpfile))
         mock_check_output_unit_action.assert_called_once_with(
-            mock_unit, mysql_innodb_backup.backup_action_name, basedir=str(backup_basedir)
+            mock_unit,
+            mysql_innodb_backup.backup_action_name,
+            DEFAULT_TASK_TIMEOUT,
+            basedir=str(backup_basedir),
         )
 
     @patch("jujubackupall.backup.ensure_path_exists")
@@ -193,7 +200,10 @@ class TestMysqlBackup(unittest.TestCase):
         mysql_innodb_backup.download_backup(save_path)
         mock_ensure_path_exists.assert_called_once_with(path=save_path)
         mock_scp_from_unit.assert_called_once_with(
-            unit=mock_unit, source=str("/tmp/" / backup_filepath), destination=str(save_path)
+            unit=mock_unit,
+            source=str("/tmp/" / backup_filepath),
+            timeout=DEFAULT_TASK_TIMEOUT,
+            destination=str(save_path),
         )
         self.assertEqual(mock_ssh_run_on_unit.call_count, 2, "assert ssh run on unit called twice")
 
@@ -211,7 +221,10 @@ class TestEtcdBackup(unittest.TestCase):
         etcd_backup_inst.backup()
         self.assertEqual(etcd_backup_inst.backup_filepath, Path(expected_path_string))
         mock_check_output_unit_action.assert_called_once_with(
-            mock_unit, etcd_backup_inst.backup_action_name, target=str(backup_basedir)
+            mock_unit,
+            etcd_backup_inst.backup_action_name,
+            DEFAULT_TASK_TIMEOUT,
+            target=str(backup_basedir),
         )
 
 
@@ -225,7 +238,9 @@ class TestPostgresqlBackup(unittest.TestCase):
         postgresql_backup_inst.backup()
         self.assertEqual(postgresql_backup_inst.backup_filepath, Path(expected_path_string))
         mock_ssh_run_on_unit.assert_called_with(
-            unit=mock_unit, command=f"sudo -u postgres pg_dumpall | gzip > {expected_path_string}"
+            unit=mock_unit,
+            command=f"sudo -u postgres pg_dumpall | gzip > {expected_path_string}",
+            timeout=DEFAULT_TASK_TIMEOUT,
         )
 
 
