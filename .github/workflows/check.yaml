@@ -131,7 +131,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [[self-hosted-linux-amd64-noble-medium]]
+        runs-on: [[self-hosted-linux-amd64-noble-xlarge]]
     steps:
       - uses: actions/checkout@v4
         with:
