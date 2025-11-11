@@ -155,19 +155,35 @@ jobs:
         with:
           provider: lxd
           juju-channel: 3.6/stable
-          bootstrap-constraints: "cores=2 mem=4G"
-          
-      - name: Verify LXD is working
+
+      - name: Configure LXD proxy for PS7 environment
+        # Refs:
+        # https://canonical-self-hosted-github-runner-docs.readthedocs-hosted.com/en/latest/usage/faq/how-to-access-external-network
+        # https://documentation.ubuntu.com/lxd/latest/server/#server-configuration
+        # https://sites.google.com/canonical.com/support/support-labs/se-cloud
         run: |
-          echo "=== LXD Network Configuration ==="
-          sudo lxc network show lxdbr0
-          echo "=== LXD Storage Configuration ==="
-          sudo lxc storage info default
-          echo "=== Testing LXD container creation ==="
-          sudo lxc launch ubuntu:22.04 test-lxd-connectivity
-          sudo lxc exec test-lxd-connectivity -- cloud-init status --wait || true
-          sudo lxc exec test-lxd-connectivity -- ping -c 3 8.8.8.8 || echo "Warning: No external connectivity"
-          sudo lxc delete test-lxd-connectivity --force
+          echo "=== Configuring LXD proxy: ==="
+          # Set up proxy configuration for LXD's default profile to ensure
+          # containers can access external network through the proxy
+          lxc config set core.proxy_http http://squid.internal:3128
+          lxc config set core.proxy_https http://squid.internal:3128
+          lxc config set core.proxy_ignore_hosts "localhost,127.0.0.1,10.149.0.0/16,10.0.0.0/8"
+
+          # Configure the default profile to pass proxy environment variables to containers
+          lxc profile set default environment.http_proxy http://squid.internal:3128
+          lxc profile set default environment.https_proxy http://squid.internal:3128
+          lxc profile set default environment.no_proxy "localhost,127.0.0.1,10.149.0.0/16,10.0.0.0/8"
+
+          echo "=== Verifying LXD proxy configuration ==="
+          lxc config show | grep proxy || true
+          lxc profile show default | grep -A3 environment || true
+
+          echo "=== Testing container connectivity ==="
+          lxc launch ubuntu:22.04 test-proxy-connectivity
+          lxc exec test-proxy-connectivity -- cloud-init status --wait || true
+          lxc exec test-proxy-connectivity -- apt-get update || echo "APT update failed"
+          lxc exec test-proxy-connectivity -- curl -I https://ubuntu.com || echo "Curl failed"
+          lxc delete test-proxy-connectivity --force
 
       - name: Install dependencies
         run: |
