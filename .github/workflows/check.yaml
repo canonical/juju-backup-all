@@ -155,6 +155,19 @@ jobs:
         with:
           provider: lxd
           juju-channel: 3.6/stable
+          bootstrap-constraints: "cores=2 mem=4G"
+          
+      - name: Verify LXD is working
+        run: |
+          echo "=== LXD Network Configuration ==="
+          sudo lxc network show lxdbr0
+          echo "=== LXD Storage Configuration ==="
+          sudo lxc storage info default
+          echo "=== Testing LXD container creation ==="
+          sudo lxc launch ubuntu:22.04 test-lxd-connectivity
+          sudo lxc exec test-lxd-connectivity -- cloud-init status --wait || true
+          sudo lxc exec test-lxd-connectivity -- ping -c 3 8.8.8.8 || echo "Warning: No external connectivity"
+          sudo lxc delete test-lxd-connectivity --force
 
       - name: Install dependencies
         run: |
