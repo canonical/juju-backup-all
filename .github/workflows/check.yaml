@@ -162,24 +162,34 @@ jobs:
         # https://documentation.ubuntu.com/lxd/latest/server/#server-configuration
         # https://sites.google.com/canonical.com/support/support-labs/se-cloud
         run: |
+          echo "=== Checking proxy availability ==="
+          echo "Proxy from environment: http_proxy=${http_proxy:-not set}, https_proxy=${https_proxy:-not set}"
+
+          # Resolve squid.internal to IP address
+          SQUID_IP=$(getent hosts squid.internal | awk '{ print $1 }' | head -1)
+          if [ -z "$SQUID_IP" ]; then
+            echo "WARNING: Cannot resolve squid.internal, using hostname"
+            PROXY_URL="http://squid.internal:3128"
+          else
+            echo "Resolved squid.internal to: $SQUID_IP"
+            PROXY_URL="http://${SQUID_IP}:3128"
+          fi
+
+          echo "Testing proxy connectivity: $PROXY_URL"
+          curl -x "$PROXY_URL" -I https://cloud-images.ubuntu.com --connect-timeout 5 || echo "WARNING: Proxy test failed"
+
           echo "=== Configuring LXD proxy: ==="
-          # Set up proxy configuration for LXD's default profile to ensure
-          # containers can access external network through the proxy
-          lxc config set core.proxy_http http://squid.internal:3128
-          lxc config set core.proxy_https http://squid.internal:3128
-          lxc config set core.proxy_ignore_hosts "localhost,127.0.0.1,10.149.0.0/16,10.0.0.0/8"
-
           # Configure the default profile to pass proxy environment variables to containers
-          lxc profile set default environment.http_proxy http://squid.internal:3128
-          lxc profile set default environment.https_proxy http://squid.internal:3128
-          lxc profile set default environment.no_proxy "localhost,127.0.0.1,10.149.0.0/16,10.0.0.0/8"
+          lxc profile set default environment.HTTP_PROXY "$PROXY_URL"
+          lxc profile set default environment.HTTPS_PROXY "$PROXY_URL"
+          lxc profile set default environment.NO_PROXY "localhost,127.0.0.1,10.149.0.0/16,10.0.0.0/8"
 
-          echo "=== Verifying LXD proxy configuration ==="
-          lxc config show | grep proxy || true
-          lxc profile show default | grep -A3 environment || true
+          echo "=== Verifying LXD profile configuration ==="
+          lxc profile show default | grep -A10 environment || true
 
           echo "=== Testing container connectivity ==="
           lxc launch ubuntu:22.04 test-proxy-connectivity
+          sleep 10
           lxc exec test-proxy-connectivity -- cloud-init status --wait || true
           lxc exec test-proxy-connectivity -- apt-get update || echo "APT update failed"
           lxc exec test-proxy-connectivity -- curl -I https://ubuntu.com || echo "Curl failed"
