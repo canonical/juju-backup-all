@@ -167,9 +167,6 @@ jobs:
           echo "Testing package installation:"
           lxc exec test-connectivity -- apt-get update
 
-          echo "Testing direct connectivity:"
-          lxc exec test-connectivity -- ping -c 3 8.8.8.8 || echo "Ping failed"
-
           echo "Testing HTTPS connectivity:"
           lxc exec test-connectivity -- curl -I https://ubuntu.com || echo "Curl to ubuntu.com failed"
 
