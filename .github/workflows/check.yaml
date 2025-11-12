@@ -131,7 +131,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [[ubuntu-24.04]]
+        runs-on: [[self-hosted-linux-amd64-noble-xlarge]]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -155,6 +155,25 @@ jobs:
         with:
           provider: lxd
           juju-channel: 3.6/stable
+
+      - name: Verify LXD container connectivity
+        run: |
+          echo "=== Testing LXD container connectivity ==="
+          lxc launch ubuntu:22.04 test-connectivity
+
+          echo "Waiting for cloud-init to complete..."
+          lxc exec test-connectivity -- cloud-init status --wait || true
+
+          echo "Testing package installation:"
+          lxc exec test-connectivity -- apt-get update
+
+          echo "Testing HTTPS connectivity:"
+          lxc exec test-connectivity -- curl -I https://ubuntu.com || echo "Curl to ubuntu.com failed"
+
+          echo "Cleaning up test container..."
+          lxc delete test-connectivity --force
+
+          echo "=== LXD containers have internet connectivity ==="
 
       - name: Install dependencies
         run: |
