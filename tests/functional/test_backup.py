@@ -39,7 +39,7 @@ async def test_build_and_deploy(ops_test):
         "ch:postgresql",
         application_name="postgresql",
         series="jammy",
-        channel="14/stable",
+        channel="latest/stable",
         num_units=1,
     )
     await ops_test.model.deploy(
