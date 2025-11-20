@@ -171,7 +171,7 @@ jobs:
           echo "=== Waiting for PostgreSQL deployment ==="
           # Wait for unit to reach a final state
           set +e
-          juju wait-for unit postgresql/0 --timeout 5m0s
+          juju wait-for unit postgresql/0 --timeout 10m0s
           WAIT_EXIT_CODE=$?
           set -e
 
