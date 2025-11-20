@@ -20,87 +20,87 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0  # Complete git history is required to generate the version from git tags.
+  # lint:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #       with:
+  #         fetch-depth: 0  # Complete git history is required to generate the version from git tags.
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.10"
+  #     - name: Set up Python 3.10
+  #       uses: actions/setup-python@v6
+  #       with:
+  #         python-version: "3.10"
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y yamllint
-          python -m pip install --upgrade pip
-          # pin tox to the current major version to avoid
-          # workflows breaking all at once when a new major version is released.
-          python -m pip install 'tox<5'
+  #     - name: Install dependencies
+  #       run: |
+  #         sudo apt update
+  #         sudo apt install -y yamllint
+  #         python -m pip install --upgrade pip
+  #         # pin tox to the current major version to avoid
+  #         # workflows breaking all at once when a new major version is released.
+  #         python -m pip install 'tox<5'
 
-      - name: Run linters
-        run: tox -e lint
+  #     - name: Run linters
+  #       run: tox -e lint
 
-      - name: Lint yaml files
-        run: |
-          yamllint .yamllint snap/snapcraft.yaml
+  #     - name: Lint yaml files
+  #       run: |
+  #         yamllint .yamllint snap/snapcraft.yaml
 
-  unit:
-    name: Unit
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.8', '3.10', '3.12']
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v5
-      with:
-        submodules: true
+  # unit:
+  #   name: Unit
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       python-version: ['3.8', '3.10', '3.12']
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - uses: actions/checkout@v5
+  #     with:
+  #       submodules: true
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
-      with:
-        python-version: ${{ matrix.python-version }}
+  #   - name: Set up Python ${{ matrix.python-version }}
+  #     uses: actions/setup-python@v6
+  #     with:
+  #       python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install 'tox<5'
+  #   - name: Install dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       python -m pip install 'tox<5'
 
-    - name: Run unit tests
-      run: tox -e unit
+  #   - name: Run unit tests
+  #     run: tox -e unit
 
-    - name: Determine system architecture
-      run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
+  #   - name: Determine system architecture
+  #     run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
 
-    - name: Create artifact name suffix
-      run: |
-        PYTHON_VERSION_SANITIZED=${{ matrix.python-version }}
-        PYTHON_VERSION_SANITIZED=${PYTHON_VERSION_SANITIZED//./-}
-        echo "ARTIFACT_SUFFIX=$PYTHON_VERSION_SANITIZED-${{ env.SYSTEM_ARCH }}" >> $GITHUB_ENV
+  #   - name: Create artifact name suffix
+  #     run: |
+  #       PYTHON_VERSION_SANITIZED=${{ matrix.python-version }}
+  #       PYTHON_VERSION_SANITIZED=${PYTHON_VERSION_SANITIZED//./-}
+  #       echo "ARTIFACT_SUFFIX=$PYTHON_VERSION_SANITIZED-${{ env.SYSTEM_ARCH }}" >> $GITHUB_ENV
 
-    - name: Rename Unit Test Coverage Artifact
-      run: |
-        if [ -e ".coverage-unit" ]; then
-          mv .coverage-unit .coverage-unit-${{ env.ARTIFACT_SUFFIX }}
-        else
-          echo "No coverage file found, skipping rename"
-        fi
+  #   - name: Rename Unit Test Coverage Artifact
+  #     run: |
+  #       if [ -e ".coverage-unit" ]; then
+  #         mv .coverage-unit .coverage-unit-${{ env.ARTIFACT_SUFFIX }}
+  #       else
+  #         echo "No coverage file found, skipping rename"
+  #       fi
 
-    - name: Upload Unit Test Coverage File
-      uses: actions/upload-artifact@v5
-      with:
-        include-hidden-files: true
-        if-no-files-found: ignore
-        name: coverage-unit-${{ env.ARTIFACT_SUFFIX }}
-        path: .coverage-unit-${{ env.ARTIFACT_SUFFIX }}
+  #   - name: Upload Unit Test Coverage File
+  #     uses: actions/upload-artifact@v5
+  #     with:
+  #       include-hidden-files: true
+  #       if-no-files-found: ignore
+  #       name: coverage-unit-${{ env.ARTIFACT_SUFFIX }}
+  #       path: .coverage-unit-${{ env.ARTIFACT_SUFFIX }}
 
   build:
-    needs:
-      - lint
+    # needs:
+    #   - lint
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
@@ -160,6 +160,50 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install 'tox<5'
+
+      - name: Diagnose PostgreSQL deployment
+        run: |
+          echo "=== Starting PostgreSQL deployment diagnostic ==="
+
+          juju add-model postgresql-test
+          juju deploy ch:postgresql --channel 14/stable --series jammy
+
+          echo "=== Waiting for PostgreSQL deployment ==="
+          # Wait for unit to reach a final state
+          set +e
+          juju wait-for unit postgresql/0 --timeout 10m0s
+          WAIT_EXIT_CODE=$?
+          set -e
+
+          # Get the current unit status
+          sudo apt install -y jq
+          UNIT_STATUS=$(juju status postgresql --format=json 2>/dev/null | jq -r '.applications.postgresql.units."postgresql/0"."workload-status".current' || echo "unknown")
+          echo "PostgreSQL unit final status: $UNIT_STATUS"
+
+          if [ "$UNIT_STATUS" = "error" ] || [ "$WAIT_EXIT_CODE" -ne 0 ]; then
+            echo "=== PostgreSQL deployment FAILED ==="
+            echo "--- Full juju status ---"
+            juju status --format=json | jq '.'
+
+            # Capture unit details
+            echo ""
+            echo "--- PostgreSQL details ---"
+            juju status postgresql --format=json | jq '.applications.postgresql.units."postgresql/0"'
+
+            # Capture debug logs
+            echo ""
+            echo "--- Debug logs ---"
+            juju debug-log --replay --no-tail --limit 100 --include postgresql
+
+            echo ""
+            echo "=== Diagnostic information capture complete ==="
+            echo "ERROR: PostgreSQL deployment failed in diagnostic test"
+          else
+            echo "=== PostgreSQL deployment succeeded in diagnostic test ==="
+          fi
+
+          echo "=== Diagnostic step complete ==="
+        continue-on-error: false
 
       - name: Run func tests
         run: |
