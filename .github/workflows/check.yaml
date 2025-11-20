@@ -171,7 +171,7 @@ jobs:
           echo "=== Waiting for PostgreSQL deployment ==="
           # Wait for unit to reach a final state
           set +e
-          juju wait-for unit postgresql/0 --timeout 10m0s
+          juju wait-for unit postgresql/0 --timeout 5m0s
           WAIT_EXIT_CODE=$?
           set -e
 
@@ -188,12 +188,17 @@ jobs:
             # Capture unit details
             echo ""
             echo "--- PostgreSQL details ---"
-            juju status postgresql --format=json | jq '.applications.postgresql.units."postgresql/0"'
+            juju show-unit postgresql/0
 
             # Capture debug logs
             echo ""
-            echo "--- Debug logs ---"
-            juju debug-log --replay --no-tail --limit 100 --include postgresql
+            echo "--- Logs from PostgreSQL unit ---"
+            juju debug-log --replay --no-tail --include postgresql
+
+            echo ""
+            echo "--- Logs from PostgreSQL unit machine ---"
+            MACHINE_ID=$(juju show-unit postgresql/0 --format json | jq -r '.[].machine')
+            juju ssh "$MACHINE_ID" -- cat /var/log/juju/machine-${MACHINE_ID}.log
 
             echo ""
             echo "=== Diagnostic information capture complete ==="
