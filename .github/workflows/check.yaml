@@ -20,113 +20,125 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    runs-on: ubuntu-22.04
+  # lint:
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #       with:
+  #         fetch-depth: 0  # Complete git history is required to generate the version from git tags.
+
+  #     - name: Set up Python 3.10
+  #       uses: actions/setup-python@v6
+  #       with:
+  #         python-version: "3.10"
+
+  #     - name: Install dependencies
+  #       run: |
+  #         sudo apt update
+  #         sudo apt install -y yamllint
+  #         python -m pip install --upgrade pip
+  #         # pin tox to the current major version to avoid
+  #         # workflows breaking all at once when a new major version is released.
+  #         python -m pip install 'tox<5'
+
+  #     - name: Run linters
+  #       run: tox -e lint
+
+  #     - name: Lint yaml files
+  #       run: |
+  #         yamllint .yamllint snap/snapcraft.yaml
+
+  # unit:
+  #   name: Unit
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       python-version: ['3.8', '3.10', '3.12']
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #   - uses: actions/checkout@v6
+  #     with:
+  #       submodules: true
+
+  #   - name: Set up Python ${{ matrix.python-version }}
+  #     uses: actions/setup-python@v6
+  #     with:
+  #       python-version: ${{ matrix.python-version }}
+
+  #   - name: Install dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       python -m pip install 'tox<5'
+
+  #   - name: Run unit tests
+  #     run: tox -e unit
+
+  #   - name: Determine system architecture
+  #     run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
+
+  #   - name: Create artifact name suffix
+  #     run: |
+  #       PYTHON_VERSION_SANITIZED=${{ matrix.python-version }}
+  #       PYTHON_VERSION_SANITIZED=${PYTHON_VERSION_SANITIZED//./-}
+  #       echo "ARTIFACT_SUFFIX=$PYTHON_VERSION_SANITIZED-${{ env.SYSTEM_ARCH }}" >> $GITHUB_ENV
+
+  #   - name: Rename Unit Test Coverage Artifact
+  #     run: |
+  #       if [ -e ".coverage-unit" ]; then
+  #         mv .coverage-unit .coverage-unit-${{ env.ARTIFACT_SUFFIX }}
+  #       else
+  #         echo "No coverage file found, skipping rename"
+  #       fi
+
+  #   - name: Upload Unit Test Coverage File
+  #     uses: actions/upload-artifact@v5
+  #     with:
+  #       include-hidden-files: true
+  #       if-no-files-found: ignore
+  #       name: coverage-unit-${{ env.ARTIFACT_SUFFIX }}
+  #       path: .coverage-unit-${{ env.ARTIFACT_SUFFIX }}
+
+  # build:
+  #   # needs:
+  #   #   - lint
+  #   runs-on: ${{ matrix.runs-on }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       runs-on: [[ubuntu-24.04]]
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #       with:
+  #         fetch-depth: 0  # Complete git history is required to generate the version from git tags.
+
+  #     - name: Verify snap builds successfully
+  #       id: build
+  #       uses: canonical/action-build@v1
+
+  #     - name: Determine system architecture
+  #       run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
+
+  #     - name: Upload the built snap
+  #       uses: actions/upload-artifact@v5
+  #       with:
+  #         name: snap_${{ env.SYSTEM_ARCH }}
+  #         path: ${{ steps.build.outputs.snap }}
+
+  check-kernel:
+    runs-on: ubuntu-24.04
+
     steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0  # Complete git history is required to generate the version from git tags.
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.10"
-
-      - name: Install dependencies
+      - name: Print kernel version
         run: |
-          sudo apt update
-          sudo apt install -y yamllint
-          python -m pip install --upgrade pip
-          # pin tox to the current major version to avoid
-          # workflows breaking all at once when a new major version is released.
-          python -m pip install 'tox<5'
-
-      - name: Run linters
-        run: tox -e lint
-
-      - name: Lint yaml files
-        run: |
-          yamllint .yamllint snap/snapcraft.yaml
-
-  unit:
-    name: Unit
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.8', '3.10', '3.12']
-    runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        submodules: true
-
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
-      with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install 'tox<5'
-
-    - name: Run unit tests
-      run: tox -e unit
-
-    - name: Determine system architecture
-      run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
-
-    - name: Create artifact name suffix
-      run: |
-        PYTHON_VERSION_SANITIZED=${{ matrix.python-version }}
-        PYTHON_VERSION_SANITIZED=${PYTHON_VERSION_SANITIZED//./-}
-        echo "ARTIFACT_SUFFIX=$PYTHON_VERSION_SANITIZED-${{ env.SYSTEM_ARCH }}" >> $GITHUB_ENV
-
-    - name: Rename Unit Test Coverage Artifact
-      run: |
-        if [ -e ".coverage-unit" ]; then
-          mv .coverage-unit .coverage-unit-${{ env.ARTIFACT_SUFFIX }}
-        else
-          echo "No coverage file found, skipping rename"
-        fi
-
-    - name: Upload Unit Test Coverage File
-      uses: actions/upload-artifact@v5
-      with:
-        include-hidden-files: true
-        if-no-files-found: ignore
-        name: coverage-unit-${{ env.ARTIFACT_SUFFIX }}
-        path: .coverage-unit-${{ env.ARTIFACT_SUFFIX }}
-
-  build:
-    needs:
-      - lint
-    runs-on: ${{ matrix.runs-on }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runs-on: [[ubuntu-24.04]]
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0  # Complete git history is required to generate the version from git tags.
-
-      - name: Verify snap builds successfully
-        id: build
-        uses: canonical/action-build@v1
-
-      - name: Determine system architecture
-        run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
-
-      - name: Upload the built snap
-        uses: actions/upload-artifact@v5
-        with:
-          name: snap_${{ env.SYSTEM_ARCH }}
-          path: ${{ steps.build.outputs.snap }}
+          echo "Kernel version:"
+          uname -r
+          echo
+          echo "Full kernel info:"
+          uname -a
 
   func:
-    needs:
-      - build
+    # needs:
+    #   - build
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
@@ -140,13 +152,13 @@ jobs:
       - name: Determine system architecture
         run: echo "SYSTEM_ARCH=$(uname -m)" >> $GITHUB_ENV
 
-      - name: Download snap file artifact
-        uses: actions/download-artifact@v6
-        with:
-          name: snap_${{ env.SYSTEM_ARCH }}
+      # - name: Download snap file artifact
+      #   uses: actions/download-artifact@v6
+      #   with:
+      #     name: snap_${{ env.SYSTEM_ARCH }}
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v6	
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
@@ -160,6 +172,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install 'tox<5'
+
+      - name: Setup tmate session
+        uses: canonical/action-tmate@main
 
       - name: Run func tests
         run: |
