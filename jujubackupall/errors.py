@@ -38,6 +38,31 @@ class JujuControllerBackupError(BackupError):
         return "{}: {}".format(self.__class__.__name__, self.juju_api_error)
 
 
+class ModelAccessError(BackupError):
+    """Raised when the connected user cannot see a model on the controller.
+
+    A precondition check failure detected before any backup API call.
+    """
+
+    def __init__(self, model_name, controller_name, visible_models):
+        super().__init__()
+        self.model_name = model_name
+        self.controller_name = controller_name
+        self.visible_models = visible_models
+
+    def __str__(self):
+        """Return string representation of ModelAccessError."""
+        visible = sorted(self.visible_models) or "none"
+        return (
+            "{}: user has no visibility on model '{}' of controller '{}'. " "Visible models: {}."
+        ).format(
+            self.__class__.__name__,
+            self.model_name,
+            self.controller_name,
+            visible,
+        )
+
+
 class ActionError(Exception):
     def __init__(self, action: Action):
         super().__init__()

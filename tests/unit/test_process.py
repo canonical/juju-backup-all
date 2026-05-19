@@ -11,7 +11,12 @@ from jujubackupall.constants import (
     DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT,
     SUPPORTED_BACKUP_CHARMS,
 )
-from jujubackupall.errors import ActionError, JujuControllerBackupError, NoLeaderError
+from jujubackupall.errors import (
+    ActionError,
+    JujuControllerBackupError,
+    ModelAccessError,
+    NoLeaderError,
+)
 from jujubackupall.process import BackupProcessor, ControllerProcessor, JujuModel
 
 SubtestCase = namedtuple("SubtestCase", ["name", "input", "expected"])
@@ -213,6 +218,30 @@ class TestControllerProcessor(unittest.TestCase):
 
         mock_tracker.add_error.assert_called_once_with(
             controller=controller_name, error_reason=str(juju_backup_error)
+        )
+
+    @patch("jujubackupall.process.tracker")
+    @patch("jujubackupall.process.JujuControllerBackup", return_value=Mock())
+    def test_backup_controller_handles_model_access_error(
+        self, mock_juju_controller_backup_class: Mock, mock_tracker: Mock
+    ):
+        controller_name = "my-controller"
+        self.mock_controller.controller_name = controller_name
+        mock_juju_controller_backup_inst = Mock()
+        mock_juju_controller_backup_class.return_value = mock_juju_controller_backup_inst
+
+        model_access_error = ModelAccessError(
+            model_name="controller",
+            controller_name=controller_name,
+            visible_models=["model-abc", "model-def"],
+        )
+        mock_juju_controller_backup_inst.backup.side_effect = [model_access_error]
+
+        controller_processor = self.create_controller_processor()
+        controller_processor.backup_controller()
+
+        mock_tracker.add_error.assert_called_once_with(
+            controller=controller_name, error_reason=str(model_access_error)
         )
 
     @patch("jujubackupall.process.ControllerProcessor._log")

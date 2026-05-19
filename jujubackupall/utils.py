@@ -34,12 +34,7 @@ from juju.unit import Unit
 
 from jujubackupall.async_handlers import run_async
 from jujubackupall.constants import MAX_FRAME_SIZE
-from jujubackupall.errors import (
-    ActionError,
-    JujuControllerBackupError,
-    JujuTimeoutError,
-    NoLeaderError,
-)
+from jujubackupall.errors import ActionError, JujuTimeoutError, ModelAccessError, NoLeaderError
 
 
 @contextmanager
@@ -197,12 +192,10 @@ def backup_controller(controller: Controller, timeout: int) -> Tuple[Model, dict
     uuids = run_async(controller.model_uuids())
     controller_uuid = uuids.get("controller")
     if not controller_uuid:
-        raise JujuControllerBackupError(
-            f"User has no visibility on the 'controller' model of "
-            f"'{controller.controller_name}'. Visible models: "
-            f"{sorted(uuids.keys()) or 'none'}.\n"
-            f"Please ensure the user has the necessary permissions "
-            f"to access the 'controller' model and try again."
+        raise ModelAccessError(
+            model_name="controller",
+            controller_name=controller.controller_name,
+            visible_models=list(uuids.keys()),
         )
     controller_model: Model = run_async(controller.get_model(controller_uuid))
     return run_with_timeout(
