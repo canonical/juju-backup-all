@@ -4,7 +4,7 @@ import unittest
 from concurrent.futures import TimeoutError
 from unittest.mock import ANY, Mock, patch
 
-from jujubackupall.errors import ActionError, JujuTimeoutError, NoLeaderError
+from jujubackupall.errors import ActionError, JujuTimeoutError, ModelAccessError, NoLeaderError
 from jujubackupall.utils import (
     backup_controller,
     check_output_unit_action,
@@ -169,15 +169,19 @@ class TestBackupController(unittest.TestCase):
         expected_dict = dict()
         controller_name = "my-controller"
         local_backup_filename = "local_filename"
-
-        mock_run_async.return_value = mock_model
+        controller_uuid = "ctrl-uuid"
+        mock_run_async.side_effect = [
+            {"controller": controller_uuid, "other": "other-uuid"},
+            mock_model,
+        ]
         mock_run_with_timeout.return_value = (local_backup_filename, expected_dict)
         mock_controller.controller_name = controller_name
 
         timeout = 60
         actual_filename, actual_dict = backup_controller(mock_controller, timeout)
 
-        mock_controller.get_model.assert_called_once_with("controller")
+        mock_controller.model_uuids.assert_called_once_with()
+        mock_controller.get_model.assert_called_once_with(controller_uuid)
         mock_run_with_timeout.assert_called_once_with(
             mock_model.create_backup(),
             f"controller backup on controller {controller_name}",
@@ -185,6 +189,40 @@ class TestBackupController(unittest.TestCase):
         )
         self.assertEqual(actual_filename, local_backup_filename)
         self.assertEqual(actual_dict, expected_dict)
+
+    @patch("jujubackupall.utils.run_async")
+    def test_backup_controller_when_controller_model_missing(self, mock_run_async: Mock):
+        """Juju user can see other models but not the 'controller' model."""
+        mock_controller = Mock()
+        mock_controller.controller_name = "my-controller"
+        mock_run_async.return_value = {"model-abc": "abc-uuid", "model-def": "def-uuid"}
+
+        with self.assertRaises(ModelAccessError) as ctx:
+            backup_controller(mock_controller, timeout=60)
+
+        err = ctx.exception
+        mock_controller.get_model.assert_not_called()
+        self.assertEqual(err.model_name, "controller")
+        self.assertEqual(err.controller_name, "my-controller")
+        self.assertEqual(sorted(err.visible_models), ["model-abc", "model-def"])
+        self.assertIn("controller", str(err))
+        self.assertIn("my-controller", str(err))
+
+    @patch("jujubackupall.utils.run_async")
+    def test_backup_controller_raises_model_access_error_when_no_visible_models(
+        self, mock_run_async: Mock
+    ):
+        """User sees zero models on the controller."""
+        mock_controller = Mock()
+        mock_controller.controller_name = "my-controller"
+        mock_run_async.return_value = {}
+
+        with self.assertRaises(ModelAccessError) as ctx:
+            backup_controller(mock_controller, timeout=60)
+
+        self.assertEqual(ctx.exception.visible_models, [])
+        self.assertIn("none", str(ctx.exception))
+        mock_controller.get_model.assert_not_called()
 
 
 class TestRunWithTimeout(unittest.TestCase):

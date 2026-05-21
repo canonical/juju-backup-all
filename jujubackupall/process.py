@@ -35,12 +35,7 @@ from jujubackupall.backup import (
 )
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
-from jujubackupall.errors import (
-    ActionError,
-    JujuControllerBackupError,
-    JujuTimeoutError,
-    NoLeaderError,
-)
+from jujubackupall.errors import ActionError, BackupError, JujuTimeoutError, NoLeaderError
 from jujubackupall.utils import (
     connect_controller,
     connect_model,
@@ -154,11 +149,11 @@ class ControllerProcessor:
                 self.controller.controller_name, str(resulting_backup_path)
             )
             self._log("Controller backed up to: {}".format(controller_backup_save_path))
-        except JujuControllerBackupError as controller_backup_error:
-            self._log("Juju controller backup failed: {}".format(controller_backup_error))
+        except BackupError as backup_error:
+            self._log("Juju controller backup failed: {}".format(backup_error))
             tracker.add_error(
                 controller=self.controller.controller_name,
-                error_reason=str(controller_backup_error),
+                error_reason=str(backup_error),
             )
 
     def backup_models(self, omit_models=None):
