@@ -91,6 +91,7 @@ parts:
       - python3-pkg-resources
       - openssh-client
     override-build: |
+      VERSION="$(python3 -m setuptools_scm)"
+      echo "Version: $VERSION"
       craftctl default
-      echo "Version: $(python3 setup.py --version)"
-      craftctl set version="$(python3 setup.py --version)"
+      craftctl set version="$VERSION"
