@@ -13,6 +13,7 @@ from jujubackupall.backup import (
     JujuClientConfigBackup,
     JujuControllerBackup,
     MysqlInnodbBackup,
+    MysqlOperatorBackup,
     PostgresqlBackup,
     SwiftBackup,
     get_charm_backup_instance,
@@ -24,14 +25,19 @@ from jujubackupall.constants import (
     DEFAULT_TASK_TIMEOUT,
     MAX_CONTROLLER_BACKUP_RETRIES,
 )
-from jujubackupall.errors import JujuControllerBackupError
+from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
 
 
 class TestGetCharmBackupInstance(unittest.TestCase):
-    @patch("jujubackupall.backup.ssh_run_on_unit")
-    def test_get_backup_instance(self, mock_ssh_run_on_unit: Mock):
+    @patch("jujubackupall.backup.get_non_leader")
+    @patch("jujubackupall.backup.get_leader")
+    def test_get_backup_instance(self, mock_get_leader: Mock, mock_get_non_leader: Mock):
+        mock_unit = Mock()
+        mock_get_leader.return_value = mock_unit
+        mock_get_non_leader.return_value = mock_unit
         test_cases = [
             ("mysql-innodb-cluster", MysqlInnodbBackup),
+            ("mysql", MysqlOperatorBackup),
             ("etcd", EtcdBackup),
             ("postgresql", PostgresqlBackup),
             ("swift-proxy", SwiftBackup),
@@ -40,13 +46,15 @@ class TestGetCharmBackupInstance(unittest.TestCase):
             with self.subTest(charm_name=charm_name, expected_backup_class=expected_backup_class):
                 backup_instance = get_charm_backup_instance(
                     charm_name,
-                    Mock(),
+                    [Mock()],
                     Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
                     Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
                     Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
                     ANY,
                 )
                 self.assertIsInstance(backup_instance, expected_backup_class)
+                if charm_name == "mysql":
+                    mock_get_non_leader.assert_called_once()
 
 
 class TestJujuControllerBackup(unittest.TestCase):
@@ -164,7 +172,7 @@ class TestJujuClientConfigBackup(unittest.TestCase):
         mock_shutil.make_archive.assert_called_once()
 
 
-class TestMysqlBackup(unittest.TestCase):
+class TestMysqlInnodbBackup(unittest.TestCase):
     @patch("jujubackupall.backup.check_output_unit_action")
     @patch("jujubackupall.backup.ssh_run_on_unit")
     def test_backup_innodb(self, mock_ssh_run_on_unit: Mock, mock_check_output_unit_action: Mock):
@@ -206,6 +214,46 @@ class TestMysqlBackup(unittest.TestCase):
             destination=str(save_path),
         )
         self.assertEqual(mock_ssh_run_on_unit.call_count, 2, "assert ssh run on unit called twice")
+
+
+class TestMysqlOperatorBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_mysql_operator(self, mock_check_output_unit_action: Mock):
+        mock_unit = Mock()
+        mock_check_output_unit_action.return_value = {
+            "backup-id": "backup-123",
+        }
+
+        backup = MysqlOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup()
+
+        self.assertEqual(backup.backup_metadata, mock_check_output_unit_action.return_value)
+        mock_check_output_unit_action.assert_called_once_with(
+            mock_unit,
+            "create-backup",
+            DEFAULT_TASK_TIMEOUT,
+        )
+
+    @patch("jujubackupall.backup.check_output_unit_action", return_value={})
+    def test_backup_mysql_operator_requires_backup_id(self, mock_check_output_unit_action: Mock):
+        backup = MysqlOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.ensure_path_exists")
+    def test_download_backup_mysql_operator(self, mock_ensure_path_exists: Mock):
+        mock_unit = Mock()
+        backup = MysqlOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup_metadata = {"backup-id": "backup-123"}
+        backup.backup_filepath = Path("backup-123")
+
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(Path("/tmp/backup-output"))
+
+        mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
+        self.assertTrue(str(result).startswith("/tmp/backup-output/"))
+        mock_write_text.assert_called_once()
 
 
 class TestEtcdBackup(unittest.TestCase):

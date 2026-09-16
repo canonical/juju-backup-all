@@ -10,6 +10,7 @@ command: `juju-backup-all`.
 
 It currently supports backing up juju controllers, juju configs, and the following charms:
 - [MySQL Innodb Cluster](https://charmhub.io/mysql-innodb-cluster)
+- [MySQL](https://charmhub.io/mysql)
 - [PostgreSQL](https://charmhub.io/postgresql)
 - [etcd](https://charmhub.io/etcd)
 
@@ -54,6 +55,7 @@ charms, excludes the juju client config backup, and runs backups on all controll
 
 ```bash
 juju-backup-all -o my/backups/ \
+  -e mysql \
   -e postgresql \
   -e etcd \
   --all-controllers

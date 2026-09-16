@@ -34,7 +34,13 @@ from juju.unit import Unit
 
 from jujubackupall.async_handlers import run_async
 from jujubackupall.constants import MAX_FRAME_SIZE
-from jujubackupall.errors import ActionError, JujuTimeoutError, ModelAccessError, NoLeaderError
+from jujubackupall.errors import (
+    ActionError,
+    JujuTimeoutError,
+    ModelAccessError,
+    NoLeaderError,
+    NoNonLeaderError,
+)
 
 
 @contextmanager
@@ -77,6 +83,14 @@ def get_leader(units: List[Unit]) -> Unit:
         if is_leader:
             return unit
     raise NoLeaderError(units=units)
+
+
+def get_non_leader(units: List[Unit]) -> Unit:
+    for unit in units:
+        is_leader = run_async(unit.is_leader_from_status())
+        if not is_leader:
+            return unit
+    raise NoNonLeaderError(units=units)
 
 
 def parse_charm_name(charm_url: str) -> str:

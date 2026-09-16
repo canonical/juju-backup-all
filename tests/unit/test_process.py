@@ -13,6 +13,7 @@ from jujubackupall.constants import (
 )
 from jujubackupall.errors import (
     ActionError,
+    BackupMetadataError,
     JujuControllerBackupError,
     ModelAccessError,
     NoLeaderError,
@@ -272,12 +273,10 @@ class TestControllerProcessor(unittest.TestCase):
 
     @patch("jujubackupall.process.ControllerProcessor.generate_full_backup_path")
     @patch("jujubackupall.process.ControllerProcessor._log")
-    @patch("jujubackupall.process.get_leader")
     @patch("jujubackupall.process.get_charm_backup_instance")
     def test_backup_apps_all_supported(
         self,
         mock_get_backup_instance: Mock,
-        mock_get_leader: Mock,
         mock_generate_full_backup_path: Mock,
         mock_log: Mock,
     ):
@@ -296,7 +295,7 @@ class TestControllerProcessor(unittest.TestCase):
         calls_get_backup_instance = [
             call(
                 charm_name="mysql-innodb-cluster",
-                unit=ANY,
+                units=ANY,
                 backup_location_on_postgresql=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
                 backup_location_on_mysql=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
                 backup_location_on_etcd=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
@@ -305,13 +304,7 @@ class TestControllerProcessor(unittest.TestCase):
         ]
         mock_get_backup_instance.assert_has_calls(calls_get_backup_instance, any_order=True)
         mock_generate_full_backup_path.assert_called()
-        self.assertEqual(
-            mock_get_leader.call_count,
-            1,
-            "assert get_leader called once (for the 1 charm in scope)",
-        )
 
-    @patch("jujubackupall.process.get_leader")
     @patch("jujubackupall.process.get_charm_backup_instance")
     @patch("jujubackupall.process.ControllerProcessor._log")
     @patch("jujubackupall.process.tracker")
@@ -320,18 +313,15 @@ class TestControllerProcessor(unittest.TestCase):
         mock_tracker: Mock,
         mock_log: Mock,
         mock_get_charm_backup_instance: Mock,
-        mock_get_leader: Mock,
     ):
         model_name = "my-model"
         charm_name = "my-charm"
         app_name = "my-app"
         controller_name = "my-controller"
         self.mock_controller.controller_name = controller_name
-        mock_leader_unit = Mock()
         mock_application = Mock()
         mock_charm_backup_instance = Mock()
 
-        mock_get_leader.return_value = mock_leader_unit
         mock_get_charm_backup_instance.return_value = mock_charm_backup_instance
 
         action_error = ActionError(Mock())
@@ -350,11 +340,37 @@ class TestControllerProcessor(unittest.TestCase):
             error_reason=str(action_error),
         )
 
-    @patch("jujubackupall.process.get_leader")
+    @patch("jujubackupall.process.get_charm_backup_instance")
+    @patch("jujubackupall.process.ControllerProcessor._log")
+    @patch("jujubackupall.process.tracker")
+    def test_backup_app_metadata_error(
+        self,
+        mock_tracker: Mock,
+        mock_log: Mock,
+        mock_get_charm_backup_instance: Mock,
+    ):
+        metadata_error = BackupMetadataError("create-backup did not return backup metadata")
+        mock_get_charm_backup_instance.return_value.backup.side_effect = metadata_error
+        self.mock_controller.controller_name = "my-controller"
+
+        controller_processor = self.create_controller_processor()
+        controller_processor.backup_app(
+            app=Mock(), app_name="mysql", model_name="my-model", charm_name="mysql"
+        )
+
+        mock_tracker.add_error.assert_called_once_with(
+            controller="my-controller",
+            model="my-model",
+            app="mysql",
+            charm="mysql",
+            error_reason=str(metadata_error),
+        )
+
+    @patch("jujubackupall.process.get_charm_backup_instance")
     @patch("jujubackupall.process.ControllerProcessor._log")
     @patch("jujubackupall.process.tracker")
     def test_backup_action_no_leader(
-        self, mock_tracker: Mock, mock_log: Mock, mock_get_leader: Mock
+        self, mock_tracker: Mock, mock_log: Mock, mock_get_charm_backup_instance: Mock
     ):
         model_name = "my-model"
         charm_name = "my-charm"
@@ -364,7 +380,7 @@ class TestControllerProcessor(unittest.TestCase):
         mock_application = Mock()
 
         no_leader_error = NoLeaderError(Mock())
-        mock_get_leader.side_effect = [no_leader_error]
+        mock_get_charm_backup_instance.side_effect = [no_leader_error]
 
         controller_processor = self.create_controller_processor()
 
