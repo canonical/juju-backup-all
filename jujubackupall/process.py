@@ -35,12 +35,18 @@ from jujubackupall.backup import (
 )
 from jujubackupall.config import Config
 from jujubackupall.constants import SUPPORTED_BACKUP_CHARMS
-from jujubackupall.errors import ActionError, BackupError, JujuTimeoutError, NoLeaderError
+from jujubackupall.errors import (
+    ActionError,
+    BackupError,
+    BackupMetadataError,
+    JujuTimeoutError,
+    NoLeaderError,
+    NoNonLeaderError,
+)
 from jujubackupall.utils import (
     connect_controller,
     connect_model,
     get_all_controllers,
-    get_leader,
     parse_charm_name,
 )
 
@@ -177,10 +183,9 @@ class ControllerProcessor:
 
     def backup_app(self, app: Application, app_name: str, charm_name: str, model_name: str):
         try:
-            leader_unit = get_leader(app.units)
             charm_backup_instance = get_charm_backup_instance(
                 charm_name=charm_name,
-                unit=leader_unit,
+                units=app.units,
                 backup_location_on_postgresql=self.backup_location_on_postgresql,
                 backup_location_on_mysql=self.backup_location_on_mysql,
                 backup_location_on_etcd=self.backup_location_on_etcd,
@@ -203,7 +208,14 @@ class ControllerProcessor:
                 app_name=app_name,
                 model_name=model_name,
             )
-        except (ActionError, NoLeaderError, JujuError, JujuTimeoutError) as error:
+        except (
+            ActionError,
+            BackupMetadataError,
+            NoLeaderError,
+            NoNonLeaderError,
+            JujuError,
+            JujuTimeoutError,
+        ) as error:
             self._log(
                 "App backup not completed: {}.".format(error),
                 app_name=app_name,
