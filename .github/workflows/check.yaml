@@ -156,6 +156,68 @@ jobs:
           provider: lxd
           juju-channel: 3.6/stable
 
+      - name: Deploy MinIO for MySQL backups
+        run: |
+          set -euo pipefail
+
+          K8S_HOST_MODEL=juju-backup-all-k8s-host-model
+          K8S_CLOUD=juju-backup-all-k8s-cloud
+          MINIO_MODEL=juju-backup-all-minio-model
+          MINIO_BUCKET=mysql-backups
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin123
+          CONTROLLER_NAME=$(juju controllers --format=json | python3 -c \
+            'import json, sys; print(json.load(sys.stdin)["current-controller"])')
+
+          juju add-model "$K8S_HOST_MODEL" localhost
+          juju deploy k8s -m "$K8S_HOST_MODEL" \
+            --channel=1.32/stable \
+            --base=ubuntu@24.04 \
+            --constraints='cores=2 mem=16G root-disk=40G virt-type=virtual-machine'
+          juju wait-for application -m "$K8S_HOST_MODEL" k8s \
+            --query='name=="k8s" && (status=="active" || status=="idle")' --timeout=40m
+
+          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s config \
+            | juju add-k8s "$K8S_CLOUD" --controller "$CONTROLLER_NAME"
+          juju add-model "$MINIO_MODEL" "$K8S_CLOUD"
+          juju deploy minio -m "$MINIO_MODEL" \
+            --channel=ckf-1.10/stable \
+            --trust \
+            --config="access-key=$MINIO_ACCESS_KEY" \
+            --config="secret-key=$MINIO_SECRET_KEY"
+          juju wait-for application -m "$MINIO_MODEL" minio \
+            --query='name=="minio" && (status=="active" || status=="idle")' --timeout=20m
+
+          MINIO_SERVICE_MANIFEST=$(printf '%s\n' \
+            'apiVersion: v1' \
+            'kind: Service' \
+            'metadata:' \
+            '  name: minio-external' \
+            "  namespace: $MINIO_MODEL" \
+            'spec:' \
+            '  type: NodePort' \
+            '  selector:' \
+            '    app.kubernetes.io/name: minio' \
+            '  ports:' \
+            '    - name: s3' \
+            '      protocol: TCP' \
+            '      port: 9000' \
+            '      targetPort: 9000')
+          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl apply -f - <<< "$MINIO_SERVICE_MANIFEST"
+
+          NODE_IP=$(juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- \
+            "sudo k8s kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type==\"InternalIP\")].address}'")
+          S3_PORT=$(juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- \
+            "sudo k8s kubectl -n $MINIO_MODEL get service minio-external -o jsonpath='{.spec.ports[?(@.name==\"s3\")].nodePort}'")
+
+          {
+            echo "S3_INTEGRATOR_ENDPOINT=http://$NODE_IP:$S3_PORT"
+            echo "S3_INTEGRATOR_BUCKET=$MINIO_BUCKET"
+            echo "S3_INTEGRATOR_PATH=/$MINIO_MODEL/mysql"
+            echo "S3_INTEGRATOR_ACCESS_KEY=$MINIO_ACCESS_KEY"
+            echo "S3_INTEGRATOR_SECRET_KEY=$MINIO_SECRET_KEY"
+          } >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -165,7 +227,7 @@ jobs:
         run: |
           export TEST_SNAP="$(pwd)/$(ls | grep '.*_.*\.snap$')"
           echo "$TEST_SNAP"
-          tox -e func
+          tox -e func -- --cloud localhost
 
       - name: Create artifact name suffix
         run: |
