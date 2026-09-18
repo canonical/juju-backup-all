@@ -156,16 +156,12 @@ jobs:
           provider: lxd
           juju-channel: 3.6/stable
 
-      - name: Deploy MinIO for MySQL backups
+      - name: Set up Kubernetes cloud for MinIO
         run: |
           set -euo pipefail
 
           K8S_HOST_MODEL=juju-backup-all-k8s-host-model
           K8S_CLOUD=juju-backup-all-k8s-cloud
-          MINIO_MODEL=juju-backup-all-minio-model
-          MINIO_BUCKET=mysql-backups
-          MINIO_ACCESS_KEY=minioadmin
-          MINIO_SECRET_KEY=minioadmin123
           CONTROLLER_NAME=$(juju controllers --format=json | python3 -c \
             'import json, sys; print(json.load(sys.stdin)["current-controller"])')
 
@@ -179,6 +175,17 @@ jobs:
 
           juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s config \
             | juju add-k8s "$K8S_CLOUD" --controller "$CONTROLLER_NAME"
+
+      - name: Deploy MinIO for MySQL backups
+        run: |
+          set -euo pipefail
+
+          K8S_HOST_MODEL=juju-backup-all-k8s-host-model
+          K8S_CLOUD=juju-backup-all-k8s-cloud
+          MINIO_MODEL=juju-backup-all-minio-model
+          MINIO_BUCKET=mysql-backups
+          MINIO_ACCESS_KEY=minioadmin
+          MINIO_SECRET_KEY=minioadmin123
           juju add-model "$MINIO_MODEL" "$K8S_CLOUD"
           juju deploy minio -m "$MINIO_MODEL" \
             --channel=ckf-1.10/stable \
@@ -204,6 +211,16 @@ jobs:
             '      port: 9000' \
             '      targetPort: 9000')
           juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl apply -f - <<< "$MINIO_SERVICE_MANIFEST"
+
+          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl \
+            -n "$MINIO_MODEL" run minio-client \
+            --image=minio/mc:latest \
+            --restart=Never \
+            --rm \
+            --attach \
+            --quiet \
+            --command -- sh -c \
+            "mc alias set minio http://minio:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY && mc mb --ignore-existing minio/$MINIO_BUCKET"
 
           NODE_IP=$(juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- \
             "sudo k8s kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type==\"InternalIP\")].address}'")

@@ -72,8 +72,8 @@ async def test_build_and_deploy(ops_test):
             num_units=3,
         )
         s3_integrator = await ops_test.model.deploy("ch:s3-integrator", channel="1/stable")
-        await ops_test.model.block_until(
-            lambda: len(s3_integrator.units) > 0, timeout=WAIT_TIMEOUT
+        await ops_test.model.wait_for_idle(
+            apps=["s3-integrator"], timeout=WAIT_TIMEOUT, check_freq=3
         )
         action = await s3_integrator.units[0].run_action(
             "sync-s3-credentials",
