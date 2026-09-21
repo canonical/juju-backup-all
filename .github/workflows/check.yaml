@@ -183,7 +183,6 @@ jobs:
           K8S_HOST_MODEL=juju-backup-all-k8s-host-model
           K8S_CLOUD=juju-backup-all-k8s-cloud
           MINIO_MODEL=juju-backup-all-minio-model
-          MINIO_BUCKET=mysql-backups
           MINIO_ACCESS_KEY=minioadmin
           MINIO_SECRET_KEY=minioadmin123
           juju add-model "$MINIO_MODEL" "$K8S_CLOUD"
@@ -212,8 +211,7 @@ jobs:
             '      targetPort: 9000')
           juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl apply -f - <<< "$MINIO_SERVICE_MANIFEST"
 
-          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl \
-            run minio-client   -n juju-backup-all-minio-model   --image=quay.io/minio/mc:latest   --restart=Never   --rm   --attach   --env="MC_HOST_minio=http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000"   -- mb --ignore-existing "minio/${MINIO_BUCKET}"
+          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl run minio-client -n "$MINIO_MODEL" --image=quay.io/minio/mc:latest --restart=Never --env="MC_HOST_minio=http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000" -- mb --ignore-existing "minio/${MINIO_MODEL}"
 
           NODE_IP=$(juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- \
             "sudo k8s kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type==\"InternalIP\")].address}'")
@@ -222,7 +220,7 @@ jobs:
 
           {
             echo "S3_INTEGRATOR_ENDPOINT=http://$NODE_IP:$S3_PORT"
-            echo "S3_INTEGRATOR_BUCKET=$MINIO_BUCKET"
+            echo "S3_INTEGRATOR_BUCKET=$MINIO_MODEL"
             echo "S3_INTEGRATOR_PATH=/$MINIO_MODEL/mysql"
             echo "S3_INTEGRATOR_ACCESS_KEY=$MINIO_ACCESS_KEY"
             echo "S3_INTEGRATOR_SECRET_KEY=$MINIO_SECRET_KEY"
