@@ -55,7 +55,6 @@ def get_s3_integrator_config():
 @pytest.mark.skip_if_deployed
 async def test_build_and_deploy(ops_test):
     """Deploy all applications."""
-    s3_integrator_config = get_s3_integrator_config()
     await ops_test.model.deploy(
         "ch:mysql-innodb-cluster",
         application_name="mysqlinnodb",
@@ -63,6 +62,7 @@ async def test_build_and_deploy(ops_test):
         channel="8.0/stable",
         num_units=3,
     )
+    s3_integrator_config = get_s3_integrator_config()
     if s3_integrator_config:
         await ops_test.model.deploy(
             "ch:mysql",
