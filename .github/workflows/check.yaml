@@ -183,9 +183,13 @@ jobs:
           K8S_HOST_MODEL=juju-backup-all-k8s-host-model
           K8S_CLOUD=juju-backup-all-k8s-cloud
           MINIO_MODEL=juju-backup-all-minio-model
+          MYSQL_BUCKET=juju-backup-all-mysql-bucket
+          MYSQLK8S_BUCKET=juju-backup-all-mysqlk8s-bucket
+          MYSQLK8S_MODEL=juju-backup-all-mysqlk8s-model
           MINIO_ACCESS_KEY=minioadmin
           MINIO_SECRET_KEY=minioadmin123
           juju add-model "$MINIO_MODEL" "$K8S_CLOUD"
+          juju add-model "$MYSQLK8S_MODEL" "$K8S_CLOUD"
           juju deploy minio -m "$MINIO_MODEL" \
             --channel=ckf-1.10/stable \
             --trust \
@@ -211,7 +215,8 @@ jobs:
             '      targetPort: 9000')
           juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl apply -f - <<< "$MINIO_SERVICE_MANIFEST"
 
-          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl run minio-client -n "$MINIO_MODEL" --image=quay.io/minio/mc:latest --restart=Never --env="MC_HOST_minio=http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000" -- mb --ignore-existing "minio/${MINIO_MODEL}"
+          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl run minio-client -n "$MINIO_MODEL" --image=quay.io/minio/mc:latest --restart=Never --env="MC_HOST_minio=http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000" -- mb --ignore-existing "minio/${MYSQL_BUCKET}"
+          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl run minio-client-mysqlk8s -n "$MINIO_MODEL" --image=quay.io/minio/mc:latest --restart=Never --env="MC_HOST_minio=http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000" -- mb --ignore-existing "minio/${MYSQLK8S_BUCKET}"
 
           NODE_IP=$(juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- \
             "sudo k8s kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type==\"InternalIP\")].address}'")
@@ -220,10 +225,15 @@ jobs:
 
           {
             echo "S3_INTEGRATOR_ENDPOINT=http://$NODE_IP:$S3_PORT"
-            echo "S3_INTEGRATOR_BUCKET=$MINIO_MODEL"
-            echo "S3_INTEGRATOR_PATH=/$MINIO_MODEL/mysql"
+            echo "S3_INTEGRATOR_BUCKET=$MYSQL_BUCKET"
+            echo "S3_INTEGRATOR_PATH=/$MYSQL_BUCKET/mysql"
             echo "S3_INTEGRATOR_ACCESS_KEY=$MINIO_ACCESS_KEY"
             echo "S3_INTEGRATOR_SECRET_KEY=$MINIO_SECRET_KEY"
+            echo "K8S_CLOUD_NAME=$K8S_CLOUD"
+            
+            echo "MYSQLK8S_MODEL_NAME=$MYSQLK8S_MODEL"
+            echo "S3_INTEGRATOR_MYSQLK8S_BUCKET=$MYSQLK8S_BUCKET"
+            echo "S3_INTEGRATOR_MYSQLK8S_PATH=/$MYSQLK8S_BUCKET/mysql-k8s"
           } >> "$GITHUB_ENV"
 
       - name: Install dependencies
