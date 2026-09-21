@@ -135,6 +135,22 @@ class MysqlOperatorBackup(CharmBackup):
         return metadata_path.absolute()
 
 
+class MysqlK8sBackup(MysqlOperatorBackup):
+    """Back up mysql-k8s using its force-enabled create-backup action."""
+
+    charm_name = "mysql-k8s"
+
+    def backup(self):
+        action_output = check_output_unit_action(
+            self.unit, self.backup_action_name, self.timeout, force=True
+        )
+        backup_id = action_output.get("backup-id")
+        self.backup_metadata = action_output
+
+        if not backup_id:
+            raise BackupMetadataError("create-backup did not return backup metadata")
+
+
 class MysqlInnodbBackup(MysqlDumpBackup):
     charm_name = "mysql-innodb-cluster"
 
@@ -393,6 +409,8 @@ def get_charm_backup_instance(
         return MysqlOperatorBackup(
             unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout
         )
+    if charm_name == MysqlK8sBackup.charm_name:
+        return MysqlK8sBackup(unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout)
     if charm_name == EtcdBackup.charm_name:
         return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd, timeout=timeout)
     if charm_name == PostgresqlBackup.charm_name:
