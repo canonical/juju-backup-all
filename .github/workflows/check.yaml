@@ -213,7 +213,7 @@ jobs:
           juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl apply -f - <<< "$MINIO_SERVICE_MANIFEST"
 
           juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl \
-            run minio-client   -n juju-backup-all-minio-model   --image=quay.io/minio/mc:latest   --restart=Never   --env="MC_HOST_minio=http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000"   -- mb --ignore-existing "minio/${MINIO_BUCKET}"
+            run minio-client   -n juju-backup-all-minio-model   --image=quay.io/minio/mc:latest   --restart=Never   --rm   --attach   --env="MC_HOST_minio=http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000"   -- mb --ignore-existing "minio/${MINIO_BUCKET}"
 
           NODE_IP=$(juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- \
             "sudo k8s kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type==\"InternalIP\")].address}'")
