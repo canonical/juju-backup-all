@@ -211,6 +211,8 @@ jobs:
             '      targetPort: 9000')
           juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl apply -f - <<< "$MINIO_SERVICE_MANIFEST"
 
+          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl wait --for=jsonpath='{.subsets[0].addresses[0]}' endpoints/minio -n "$MINIO_MODEL" --timeout=3m
+
           juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl run minio-client -n "$MINIO_MODEL" --image=quay.io/minio/mc:latest --restart=Never --env="MC_HOST_minio=http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000" -- mb --ignore-existing "minio/${MINIO_MODEL}"
           WAIT_EXIT_CODE=0
           juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/minio-client -n "$MINIO_MODEL" --timeout=5m || WAIT_EXIT_CODE=$?
