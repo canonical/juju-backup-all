@@ -43,10 +43,6 @@ def run_command(command: str) -> str:
     return subprocess.check_output(command, shell=True, text=True)
 
 
-def run_command_with_input(command: list[str], command_input: str) -> None:
-    subprocess.run(command, input=command_input, text=True, check=True)
-
-
 def k8s_cloud_available() -> bool:
     try:
         clouds_output = run_command("juju clouds --format=json")
@@ -74,61 +70,37 @@ def configure_minio_for_mysql_backups():
         "--timeout=20m"
     )
 
-    minio_service_manifest = "\n".join(
-        (
-            "apiVersion: v1",
-            "kind: Service",
-            "metadata:",
-            "  name: minio-external",
-            f"  namespace: {MINIO_MODEL}",
-            "spec:",
-            "  type: NodePort",
-            "  selector:",
-            "    app.kubernetes.io/name: minio",
-            "  ports:",
-            "    - name: s3",
-            "      protocol: TCP",
-            "      port: 9000",
-            "      targetPort: 9000",
-        )
+    k8s_status = json.loads(run_command(f'juju status -m "{K8S_HOST_MODEL}" --format=json'))
+    load_balancer_cidrs = " ".join(
+        f"{machine['ip-addresses'][0]}/32"
+        for machine in k8s_status.get("machines", {}).values()
+        if machine.get("ip-addresses")
     )
-    run_command_with_input(
-        [
-            "juju",
-            "ssh",
-            "-m",
-            K8S_HOST_MODEL,
-            "k8s/0",
-            "--",
-            "sudo",
-            "k8s",
-            "kubectl",
-            "apply",
-            "-f",
-            "-",
-        ],
-        minio_service_manifest,
+    run_command(
+        f'juju config k8s -m "{K8S_HOST_MODEL}" '
+        "load-balancer-enabled=true local-storage-enabled=true "
+        f'load-balancer-cidrs="{load_balancer_cidrs}"'
+    )
+    run_command(
+        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- '
+        f'sudo k8s kubectl -n "{MINIO_MODEL}" patch svc minio '
+        '-p \'{"spec": {"type": "LoadBalancer"}}\''
     )
     run_command(
         f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl wait '
-        f"--for=jsonpath='{{.subsets[0].addresses[0]}}' endpoints/minio -n \"{MINIO_MODEL}\" "
-        "--timeout=3m"
+        f"--for=jsonpath='{{.status.loadBalancer.ingress[0].ip}}' "
+        f'service/minio -n "{MINIO_MODEL}" --timeout=5m'
     )
 
-    node_ip = run_command(
+    load_balancer_ip = run_command(
         f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- '
-        '"sudo k8s kubectl get nodes '
-        "-o jsonpath='{.items[0].status.addresses[?(@.type==\"InternalIP\")].address}'"
-    ).strip()
-    s3_port = run_command(
-        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- '
-        f'"sudo k8s kubectl -n {MINIO_MODEL} get service minio-external '
-        "-o jsonpath='{.spec.ports[?(@.name==\"s3\")].nodePort}'"
+        f'"sudo k8s kubectl -n {MINIO_MODEL} get service minio '
+        "-o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
     ).strip()
 
     os.environ.update(
         {
-            "S3_INTEGRATOR_ENDPOINT": f"http://{node_ip}:{s3_port}",
+            "S3_INTEGRATOR_ENDPOINT": f"http://{load_balancer_ip}:9000",
             "S3_INTEGRATOR_BUCKET": MINIO_MODEL,
             "S3_INTEGRATOR_PATH": f"/{MINIO_MODEL}/mysql",
             "S3_INTEGRATOR_ACCESS_KEY": MINIO_ACCESS_KEY,
