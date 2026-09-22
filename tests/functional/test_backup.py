@@ -25,6 +25,11 @@ import pytest
 from jujubackupall.utils import parse_charm_name
 
 WAIT_TIMEOUT = 20 * 60
+K8S_HOST_MODEL = "juju-backup-all-k8s-host-model"
+K8S_CLOUD = "juju-backup-all-k8s-cloud"
+MINIO_MODEL = "juju-backup-all-minio-model"
+MINIO_ACCESS_KEY = "minioadmin"
+MINIO_SECRET_KEY = "minioadmin123"
 S3_INTEGRATOR_CONFIG_ENVIRONMENT_VARIABLES = (
     "S3_INTEGRATOR_ENDPOINT",
     "S3_INTEGRATOR_BUCKET",
@@ -32,6 +37,128 @@ S3_INTEGRATOR_CONFIG_ENVIRONMENT_VARIABLES = (
     "S3_INTEGRATOR_ACCESS_KEY",
     "S3_INTEGRATOR_SECRET_KEY",
 )
+
+
+def run_command(command: str) -> str:
+    return subprocess.check_output(command, shell=True, text=True)
+
+
+def run_command_with_input(command: list[str], command_input: str) -> None:
+    subprocess.run(command, input=command_input, text=True, check=True)
+
+
+def k8s_cloud_available() -> bool:
+    try:
+        clouds_output = run_command("juju clouds --format=json")
+    except subprocess.CalledProcessError:
+        return False
+    clouds = json.loads(clouds_output).get("clouds", {})
+    return K8S_CLOUD in clouds
+
+
+def configure_minio_for_mysql_backups():
+    if get_s3_integrator_config() or not k8s_cloud_available():
+        return
+
+    run_command(f'juju add-model "{MINIO_MODEL}" "{K8S_CLOUD}"')
+    run_command(
+        f'juju deploy minio -m "{MINIO_MODEL}" '
+        "--channel=ckf-1.10/stable "
+        "--trust "
+        f'--config="access-key={MINIO_ACCESS_KEY}" '
+        f'--config="secret-key={MINIO_SECRET_KEY}"'
+    )
+    run_command(
+        f'juju wait-for application -m "{MINIO_MODEL}" minio '
+        '--query=\'name=="minio" && (status=="active" || status=="idle")\' '
+        "--timeout=20m"
+    )
+
+    minio_service_manifest = "\n".join(
+        (
+            "apiVersion: v1",
+            "kind: Service",
+            "metadata:",
+            "  name: minio-external",
+            f"  namespace: {MINIO_MODEL}",
+            "spec:",
+            "  type: NodePort",
+            "  selector:",
+            "    app.kubernetes.io/name: minio",
+            "  ports:",
+            "    - name: s3",
+            "      protocol: TCP",
+            "      port: 9000",
+            "      targetPort: 9000",
+        )
+    )
+    run_command_with_input(
+        [
+            "juju",
+            "ssh",
+            "-m",
+            K8S_HOST_MODEL,
+            "k8s/0",
+            "--",
+            "sudo",
+            "k8s",
+            "kubectl",
+            "apply",
+            "-f",
+            "-",
+        ],
+        minio_service_manifest,
+    )
+    run_command(
+        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl wait '
+        f"--for=jsonpath='{{.subsets[0].addresses[0]}}' endpoints/minio -n \"{MINIO_MODEL}\" "
+        "--timeout=3m"
+    )
+    run_command(
+        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl run minio-client '
+        f'-n "{MINIO_MODEL}" --image=quay.io/minio/mc:latest --restart=Never '
+        f'--env="MC_HOST_minio=http://{MINIO_ACCESS_KEY}:{MINIO_SECRET_KEY}@minio:9000" '
+        f'-- mb --ignore-existing "minio/{MINIO_MODEL}"'
+    )
+    wait_exit_code = subprocess.call(
+        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl wait '
+        f"--for=jsonpath='{{.status.phase}}'=Succeeded pod/minio-client -n \"{MINIO_MODEL}\" "
+        "--timeout=5m",
+        shell=True,
+    )
+    subprocess.call(
+        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl logs minio-client '
+        f'-n "{MINIO_MODEL}"',
+        shell=True,
+    )
+    subprocess.call(
+        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl delete pod minio-client '
+        f'-n "{MINIO_MODEL}" --ignore-not-found',
+        shell=True,
+    )
+    if wait_exit_code != 0:
+        raise RuntimeError("minio-client pod did not reach Succeeded")
+
+    node_ip = run_command(
+        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- '
+        '"sudo k8s kubectl get nodes '
+        "-o jsonpath='{.items[0].status.addresses[?(@.type==\"InternalIP\")].address}'"
+    ).strip()
+    s3_port = run_command(
+        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- '
+        f'"sudo k8s kubectl -n {MINIO_MODEL} get service minio-external '
+        "-o jsonpath='{.spec.ports[?(@.name==\"s3\")].nodePort}'"
+    ).strip()
+
+    os.environ.update(
+        {
+            "S3_INTEGRATOR_ENDPOINT": f"http://{node_ip}:{s3_port}",
+            "S3_INTEGRATOR_BUCKET": MINIO_MODEL,
+            "S3_INTEGRATOR_PATH": f"/{MINIO_MODEL}/mysql",
+            "S3_INTEGRATOR_ACCESS_KEY": MINIO_ACCESS_KEY,
+            "S3_INTEGRATOR_SECRET_KEY": MINIO_SECRET_KEY,
+        }
+    )
 
 
 def get_s3_integrator_config():
@@ -55,6 +182,8 @@ def get_s3_integrator_config():
 @pytest.mark.skip_if_deployed
 async def test_build_and_deploy(ops_test):
     """Deploy all applications."""
+    configure_minio_for_mysql_backups()
+
     await ops_test.model.deploy(
         "ch:mysql-innodb-cluster",
         application_name="mysqlinnodb",
