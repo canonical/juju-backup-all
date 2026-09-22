@@ -86,7 +86,9 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
         return (save_path / self.backup_filepath.name).absolute()
 
 
-class MysqlBackup(CharmBackup, metaclass=ABCMeta):
+class MysqlDumpBackup(CharmBackup, metaclass=ABCMeta):
+    """Back up MySQL with mysqldump and download the generated dump file."""
+
     backup_action_name = "mysqldump"
 
     def backup(self):
@@ -107,6 +109,7 @@ class MysqlBackup(CharmBackup, metaclass=ABCMeta):
 
 
 class MysqlOperatorBackup(CharmBackup):
+    """Back up the MySQL Operator charm through its S3-backed backup action."""
 
     charm_name = "mysql"
     backup_action_name = "create-backup"
@@ -132,7 +135,7 @@ class MysqlOperatorBackup(CharmBackup):
         return metadata_path.absolute()
 
 
-class MysqlInnodbBackup(MysqlBackup):
+class MysqlInnodbBackup(MysqlDumpBackup):
     charm_name = "mysql-innodb-cluster"
 
 
