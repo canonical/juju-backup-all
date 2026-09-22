@@ -114,30 +114,6 @@ def configure_minio_for_mysql_backups():
         f"--for=jsonpath='{{.subsets[0].addresses[0]}}' endpoints/minio -n \"{MINIO_MODEL}\" "
         "--timeout=3m"
     )
-    run_command(
-        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl run minio-client '
-        f'-n "{MINIO_MODEL}" --image=quay.io/minio/mc:latest --restart=Never '
-        f'--env="MC_HOST_minio=http://{MINIO_ACCESS_KEY}:{MINIO_SECRET_KEY}@minio:9000" '
-        f'-- mb --ignore-existing "minio/{MINIO_MODEL}"'
-    )
-    wait_exit_code = subprocess.call(
-        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl wait '
-        f"--for=jsonpath='{{.status.phase}}'=Succeeded pod/minio-client -n \"{MINIO_MODEL}\" "
-        "--timeout=5m",
-        shell=True,
-    )
-    subprocess.call(
-        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl logs minio-client '
-        f'-n "{MINIO_MODEL}"',
-        shell=True,
-    )
-    subprocess.call(
-        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl delete pod minio-client '
-        f'-n "{MINIO_MODEL}" --ignore-not-found',
-        shell=True,
-    )
-    if wait_exit_code != 0:
-        raise RuntimeError("minio-client pod did not reach Succeeded")
 
     node_ip = run_command(
         f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- '
@@ -200,7 +176,7 @@ async def test_build_and_deploy(ops_test):
             channel="8.0/stable",
             num_units=3,
         )
-        s3_integrator = await ops_test.model.deploy("ch:s3-integrator", channel="1/stable")
+        s3_integrator = await ops_test.model.deploy("ch:s3-integrator", channel="2/stable")
         await ops_test.model.wait_for_idle(
             apps=["s3-integrator"], timeout=WAIT_TIMEOUT, check_freq=3
         )
