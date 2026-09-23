@@ -28,6 +28,10 @@ class BackupError(Exception):
     pass
 
 
+class BackupMetadataError(BackupError):
+    pass
+
+
 class JujuControllerBackupError(BackupError):
     def __init__(self, juju_api_error: JujuAPIError):
         super().__init__()
@@ -95,6 +99,18 @@ class NoLeaderError(Exception):
     def __str__(self):
         """Return string representation of NoLeaderError."""
         return "{}: No leader could be found for units: {}".format(
+            self.__class__.__name__, self.units
+        )
+
+
+class NoNonLeaderError(Exception):
+    def __init__(self, units: List[Unit]):
+        super().__init__()
+        self.units = units
+
+    def __str__(self):
+        """Return string representation of NoNonLeaderError."""
+        return "{}: No non-leader unit could be found for units: {}".format(
             self.__class__.__name__, self.units
         )
 

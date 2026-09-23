@@ -32,12 +32,14 @@ from juju.errors import JujuAPIError
 from juju.unit import Unit
 
 from jujubackupall.constants import DEFAULT_TASK_TIMEOUT, MAX_CONTROLLER_BACKUP_RETRIES
-from jujubackupall.errors import JujuControllerBackupError
+from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
 from jujubackupall.utils import (
     backup_controller,
     check_output_unit_action,
     ensure_path_exists,
     get_datetime_string,
+    get_leader,
+    get_non_leader,
     scp_from_unit,
     ssh_run_on_unit,
 )
@@ -84,7 +86,9 @@ class CharmBackup(BaseBackup, metaclass=ABCMeta):
         return (save_path / self.backup_filepath.name).absolute()
 
 
-class MysqlBackup(CharmBackup, metaclass=ABCMeta):
+class MysqlDumpBackup(CharmBackup, metaclass=ABCMeta):
+    """Back up MySQL with mysqldump and download the generated dump file."""
+
     backup_action_name = "mysqldump"
 
     def backup(self):
@@ -104,7 +108,34 @@ class MysqlBackup(CharmBackup, metaclass=ABCMeta):
         return super().download_backup(save_path)
 
 
-class MysqlInnodbBackup(MysqlBackup):
+class MysqlOperatorBackup(CharmBackup):
+    """Back up the MySQL Operator charm through its S3-backed backup action."""
+
+    charm_name = "mysql"
+    backup_action_name = "create-backup"
+
+    def backup(self):
+        # Run and validate the create-backup action for the MySQL operator charm.
+        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
+
+        backup_id = action_output.get("backup-id")
+        self.backup_metadata = action_output
+
+        if not backup_id:
+            raise BackupMetadataError("create-backup did not return backup metadata")
+
+    def download_backup(self, save_path: Path) -> Path:
+        # The MySQL operator backup is not a file to SCP from the unit. Instead,
+        # store the metadata payload returned by the action in the configured
+        # backup output directory.
+        ensure_path_exists(path=save_path)
+        metadata_filename = "mysql-backup-metadata-{}.json".format(get_datetime_string())
+        metadata_path = save_path / metadata_filename
+        metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
+        return metadata_path.absolute()
+
+
+class MysqlInnodbBackup(MysqlDumpBackup):
     charm_name = "mysql-innodb-cluster"
 
 
@@ -341,14 +372,25 @@ class BackupTracker:
 
 def get_charm_backup_instance(
     charm_name: str,
-    unit: Unit,
+    units: List[Unit],
     backup_location_on_postgresql: Path,
     backup_location_on_mysql: Path,
     backup_location_on_etcd: Path,
     timeout: int,
 ) -> CharmBackupType:
+    if charm_name == MysqlOperatorBackup.charm_name:
+        # For the MySQL operator charm, we need to get a non-leader unit to perform the backup.
+        # The charm would return a "Unit cannot perform backups as it is the cluster primary" error
+        # if we tried to perform the backup on the leader unit.
+        unit = get_non_leader(units)
+    else:
+        unit = get_leader(units)
     if charm_name == MysqlInnodbBackup.charm_name:
         return MysqlInnodbBackup(
+            unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout
+        )
+    if charm_name == MysqlOperatorBackup.charm_name:
+        return MysqlOperatorBackup(
             unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout
         )
     if charm_name == EtcdBackup.charm_name:

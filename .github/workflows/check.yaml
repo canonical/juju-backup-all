@@ -156,6 +156,26 @@ jobs:
           provider: lxd
           juju-channel: 3.6/stable
 
+      - name: Set up Kubernetes cloud for MinIO
+        run: |
+          set -euo pipefail
+
+          K8S_HOST_MODEL=juju-backup-all-k8s-host-model
+          K8S_CLOUD=juju-backup-all-k8s-cloud
+          CONTROLLER_NAME=$(juju controllers --format=json | python3 -c \
+            'import json, sys; print(json.load(sys.stdin)["current-controller"])')
+
+          juju add-model "$K8S_HOST_MODEL" localhost
+          juju deploy k8s -m "$K8S_HOST_MODEL" \
+            --channel=1.32/stable \
+            --base=ubuntu@24.04 \
+            --constraints='cores=2 mem=16G root-disk=40G virt-type=virtual-machine'
+          juju wait-for application -m "$K8S_HOST_MODEL" k8s \
+            --query='name=="k8s" && (status=="active" || status=="idle")' --timeout=40m
+
+          juju ssh -m "$K8S_HOST_MODEL" k8s/0 -- sudo k8s config \
+            | juju add-k8s "$K8S_CLOUD" --controller "$CONTROLLER_NAME"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -165,7 +185,7 @@ jobs:
         run: |
           export TEST_SNAP="$(pwd)/$(ls | grep '.*_.*\.snap$')"
           echo "$TEST_SNAP"
-          tox -e func
+          tox -e func -- --cloud localhost
 
       - name: Create artifact name suffix
         run: |

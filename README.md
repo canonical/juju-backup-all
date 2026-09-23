@@ -10,6 +10,7 @@ command: `juju-backup-all`.
 
 It currently supports backing up juju controllers, juju configs, and the following charms:
 - [MySQL Innodb Cluster](https://charmhub.io/mysql-innodb-cluster)
+- [MySQL](https://charmhub.io/mysql)
 - [PostgreSQL](https://charmhub.io/postgresql)
 - [etcd](https://charmhub.io/etcd)
 
@@ -54,6 +55,7 @@ charms, excludes the juju client config backup, and runs backups on all controll
 
 ```bash
 juju-backup-all -o my/backups/ \
+  -e mysql \
   -e postgresql \
   -e etcd \
   --all-controllers
@@ -117,6 +119,10 @@ that model instead of deploying another one.
 (like `juju create-backup`) and without this set, the environment for functional tests has no info on controllers.
 - `PYTEST_SELECT_TESTS`: use to select tests based on their name (via
 [pytest `-k` expression docs](https://docs.pytest.org/en/latest/example/markers.html#using-k-expr-to-select-tests-based-on-their-name))
+- `S3_INTEGRATOR_ENDPOINT`, `S3_INTEGRATOR_BUCKET`, `S3_INTEGRATOR_PATH`,
+  `S3_INTEGRATOR_ACCESS_KEY`, and `S3_INTEGRATOR_SECRET_KEY`: configure the s3-integrator
+  for the optional MySQL operator functional test. The endpoint and bucket must refer to a
+  reachable, pre-created S3-compatible storage location.
 
 ### Unit tests
 
