@@ -44,21 +44,10 @@ def run_command(command: str) -> str:
     return subprocess.check_output(command, shell=True, text=True)
 
 
-def run_juju(*args: str) -> str:
-    return subprocess.check_output(["juju", *args], text=True)
-
-
-def k8s_cloud_available() -> bool:
-    try:
-        controller_name = run_command(
-            "juju controllers --format=json | "
-            "python3 -c 'import json, sys; "
-            'print(json.load(sys.stdin)["current-controller"])\''
-        ).strip()
-        run_command(f'juju show-cloud "{K8S_CLOUD}" --controller "{controller_name}"')
-    except subprocess.CalledProcessError:
-        return False
-    return True
+def run_juju(*args: str, input: str | None = None) -> str:
+    return subprocess.run(
+        ["juju", *args], check=True, input=input, text=True, capture_output=True
+    ).stdout
 
 
 def ensure_mysqlk8s_model():
@@ -74,10 +63,7 @@ def configure_minio_for_mysql_backups():
         os.environ.setdefault("MYSQLK8S_MODEL_NAME", MYSQLK8S_MODEL)
         os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_BUCKET", f"{MINIO_MODEL}-mysql-k8s")
         os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_PATH", f"/{MINIO_MODEL}/mysql-k8s")
-        if k8s_cloud_available():
-            ensure_mysqlk8s_model()
-        return
-    if not k8s_cloud_available():
+        ensure_mysqlk8s_model()
         return
 
     run_command(f'juju add-model "{MINIO_MODEL}" "{K8S_CLOUD}"')
