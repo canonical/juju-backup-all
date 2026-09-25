@@ -14,6 +14,7 @@ from jujubackupall.backup import (
     JujuControllerBackup,
     MysqlInnodbBackup,
     MysqlOperatorBackup,
+    MysqlOperatorK8sBackup,
     PostgresqlBackup,
     SwiftBackup,
     get_charm_backup_instance,
@@ -38,6 +39,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
         test_cases = [
             ("mysql-innodb-cluster", MysqlInnodbBackup),
             ("mysql", MysqlOperatorBackup),
+            ("mysql-k8s", MysqlOperatorK8sBackup),
             ("etcd", EtcdBackup),
             ("postgresql", PostgresqlBackup),
             ("swift-proxy", SwiftBackup),
@@ -254,6 +256,23 @@ class TestMysqlOperatorBackup(unittest.TestCase):
         mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
         self.assertTrue(str(result).startswith("/tmp/backup-output/"))
         mock_write_text.assert_called_once()
+
+
+class TestMysqlK8sOperatorBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_mysql_k8s(self, mock_check_output_unit_action: Mock):
+        mock_unit = Mock()
+        mock_check_output_unit_action.return_value = {"backup-id": "backup-123"}
+
+        backup = MysqlOperatorK8sBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup()
+
+        self.assertEqual(backup.backup_metadata, mock_check_output_unit_action.return_value)
+        mock_check_output_unit_action.assert_called_once_with(
+            mock_unit,
+            "create-backup",
+            DEFAULT_TASK_TIMEOUT,
+        )
 
 
 class TestEtcdBackup(unittest.TestCase):
