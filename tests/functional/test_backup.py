@@ -14,10 +14,12 @@
 
 """Test juju-backup-all on multi-model controller."""
 
+import base64
 import glob
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -72,9 +74,12 @@ def configure_minio_for_mysql_backups():
 
     k8s_status = json.loads(run_command(f'juju status -m "{K8S_HOST_MODEL}" --format=json'))
     load_balancer_cidrs = " ".join(
-        f"{machine['ip-addresses'][0]}/32"
+        f"{address}/32"
         for machine in k8s_status.get("machines", {}).values()
-        if machine.get("ip-addresses")
+        for interface in machine.get("network-interfaces", {}).values()
+        if interface.get("gateway")
+        for address in interface.get("ip-addresses", [])
+        if ":" not in address
     )
     run_command(
         f'juju config k8s -m "{K8S_HOST_MODEL}" '
@@ -98,13 +103,35 @@ def configure_minio_for_mysql_backups():
         "-o jsonpath='{.status.loadBalancer.ingress[0].ip}'"
     ).strip()
 
+    with tempfile.TemporaryDirectory() as certificate_directory:
+        certificate_path = Path(certificate_directory) / "minio.crt"
+        key_path = Path(certificate_directory) / "minio.key"
+        run_command(
+            "openssl req -x509 -newkey rsa:2048 -nodes "
+            f'-keyout "{key_path}" -out "{certificate_path}" -days 365 '
+            f'-subj "/CN={load_balancer_ip}" '
+            f'-addext "subjectAltName=IP:{load_balancer_ip}"'
+        )
+        certificate = base64.b64encode(certificate_path.read_bytes()).decode()
+        private_key = base64.b64encode(key_path.read_bytes()).decode()
+        run_command(
+            f'juju config minio -m "{MINIO_MODEL}" '
+            f'ssl-cert="{certificate}" ssl-key="{private_key}"'
+        )
+
+    run_command(
+        f'juju wait-for application -m "{MINIO_MODEL}" minio '
+        "--query='status==\"active\"' --timeout=20m"
+    )
+
     os.environ.update(
         {
-            "S3_INTEGRATOR_ENDPOINT": f"http://{load_balancer_ip}:9000",
+            "S3_INTEGRATOR_ENDPOINT": f"https://{load_balancer_ip}:9000",
             "S3_INTEGRATOR_BUCKET": MINIO_MODEL,
             "S3_INTEGRATOR_PATH": f"/{MINIO_MODEL}/mysql",
             "S3_INTEGRATOR_ACCESS_KEY": MINIO_ACCESS_KEY,
             "S3_INTEGRATOR_SECRET_KEY": MINIO_SECRET_KEY,
+            "S3_INTEGRATOR_TLS_CA_CHAIN": certificate,
         }
     )
 
@@ -117,13 +144,16 @@ def get_s3_integrator_config():
     ]
     if missing_variables:
         return None
-    return {
+    config = {
         "endpoint": os.environ["S3_INTEGRATOR_ENDPOINT"],
         "bucket": os.environ["S3_INTEGRATOR_BUCKET"],
         "path": os.environ["S3_INTEGRATOR_PATH"],
         "region": "us-east-1",
         "s3-uri-style": "path",
     }
+    if os.environ.get("S3_INTEGRATOR_TLS_CA_CHAIN"):
+        config["tls-ca-chain"] = os.environ["S3_INTEGRATOR_TLS_CA_CHAIN"]
+    return config
 
 
 @pytest.mark.abort_on_fail
@@ -169,6 +199,22 @@ async def test_build_and_deploy(ops_test):
         channel="14/stable",
         num_units=1,
     )
+    s3_integrator_config = get_s3_integrator_config()
+    if s3_integrator_config:
+        s3_integrator = await ops_test.model.deploy("ch:s3-integrator", channel="1/stable")
+        await ops_test.model.wait_for_idle(
+            apps=["s3-integrator"], timeout=WAIT_TIMEOUT, check_freq=3
+        )
+        action = await s3_integrator.units[0].run_action(
+            "sync-s3-credentials",
+            **{
+                "access-key": os.environ["S3_INTEGRATOR_ACCESS_KEY"],
+                "secret-key": os.environ["S3_INTEGRATOR_SECRET_KEY"],
+            },
+        )
+        await action.wait()
+        await s3_integrator.set_config(s3_integrator_config)
+        await ops_test.model.relate("postgresql", "s3-integrator")
     await ops_test.model.deploy(
         "ch:etcd", application_name="etcd", series="jammy", channel="stable", num_units=1
     )
@@ -254,7 +300,10 @@ def test_postgresql_backup(backup_location, ops_test, tmp_path: Path):
     assert any(x.get("model") == model_name for x in output_dict.get("app_backups"))
     assert app_backup_entry.get("charm") in postgresql_app.data.get("charm-url")
     assert expected_output_dir.exists()
-    assert glob.glob(str(expected_output_dir) + "/pgdump-all-databases*.gz")
+    metadata_files = list(expected_output_dir.glob("postgresql-backup-metadata-*.json"))
+    assert len(metadata_files) == 1
+    metadata = json.loads(metadata_files[0].read_text())
+    assert metadata.get("backup-status") == "backup created"
 
 
 @pytest.mark.parametrize("backup_location", ["/home/ubuntu/etcd-snapshots", "/home/ubuntu/abc"])

@@ -91,6 +91,7 @@ class MysqlDumpBackup(CharmBackup, metaclass=ABCMeta):
 
     backup_action_name = "mysqldump"
 
+    # Backup using dump
     def backup(self):
         action_output = check_output_unit_action(
             self.unit, self.backup_action_name, self.timeout, basedir=str(self.backup_basedir)
@@ -114,7 +115,8 @@ class MysqlOperatorBackup(CharmBackup):
     charm_name = "mysql"
     backup_action_name = "create-backup"
 
-    def backup(self):
+    # Backup using the create-backup action
+    def backup_action(self):
         # Run and validate the create-backup action for the MySQL operator charm.
         action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
 
@@ -123,6 +125,9 @@ class MysqlOperatorBackup(CharmBackup):
 
         if not backup_id:
             raise BackupMetadataError("create-backup did not return backup metadata")
+
+    def backup(self):
+        self.backup_action()
 
     def download_backup(self, save_path: Path) -> Path:
         # The MySQL operator backup is not a file to SCP from the unit. Instead,
@@ -151,10 +156,14 @@ class EtcdBackup(CharmBackup):
 
 
 class PostgresqlBackup(CharmBackup):
+    """Back up PostgreSQL through its S3-backed backup action."""
+
     charm_name = "postgresql"
     date_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
     pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
+    backup_action_name = "create-backup"
 
+    # Backup (old) using dump, deprecated in favor of create-backup
     def backup(self):
         # we only need to create directory for postgres because mysql and etcd
         # charms will create the directory by themselves
@@ -164,6 +173,26 @@ class PostgresqlBackup(CharmBackup):
         self.backup_filepath = self.backup_basedir / self.pgdump_filename
         backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
         ssh_run_on_unit(unit=self.unit, command=backup_cmd, timeout=self.timeout)
+        self.backup_metadata = None
+
+    # Backup (new) using the create-backup action
+    def backup_action(self):
+        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
+        backup_status = action_output.get("backup-status")
+        self.backup_metadata = action_output
+
+        if not backup_status:
+            raise BackupMetadataError("create-backup did not return backup metadata")
+
+    def download_backup(self, save_path: Path) -> Path:
+        if not self.backup_metadata:
+            return super().download_backup(save_path)
+
+        ensure_path_exists(path=save_path)
+        metadata_filename = "postgresql-backup-metadata-{}.json".format(get_datetime_string())
+        metadata_path = save_path / metadata_filename
+        metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
+        return metadata_path.absolute()
 
 
 class SwiftBackup(CharmBackup):
@@ -397,7 +426,9 @@ def get_charm_backup_instance(
         return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd, timeout=timeout)
     if charm_name == PostgresqlBackup.charm_name:
         return PostgresqlBackup(
-            unit=unit, backup_basedir=backup_location_on_postgresql, timeout=timeout
+            unit=unit,
+            backup_basedir=backup_location_on_postgresql,
+            timeout=timeout,
         )
     if charm_name == SwiftBackup.charm_name:  # Not implemented
         return SwiftBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
