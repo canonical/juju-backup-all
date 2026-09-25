@@ -178,7 +178,10 @@ class ControllerProcessor:
             charm_name = parse_charm_name(charm_url)
             if charm_name in self.apps_to_backup:
                 self.backup_app(
-                    app=app, app_name=app_name, charm_name=charm_name, model_name=model_name
+                    app=app,
+                    app_name=app_name,
+                    charm_name=charm_name,
+                    model_name=model_name,
                 )
 
     def backup_app(self, app: Application, app_name: str, charm_name: str, model_name: str):
@@ -192,7 +195,11 @@ class ControllerProcessor:
                 timeout=self.timeout,
             )
             self._log("Backing up app.", app_name=app_name, model_name=model_name)
-            charm_backup_instance.backup()
+            backup_action = getattr(charm_backup_instance, "backup_action", None)
+            if backup_action:
+                backup_action()
+            else:
+                charm_backup_instance.backup()
             self._log("Downloading backup.", app_name=app_name, model_name=model_name)
             full_backup_path = self.generate_full_backup_path(model_name, app_name)
             resulting_backup_path = charm_backup_instance.download_backup(full_backup_path)
