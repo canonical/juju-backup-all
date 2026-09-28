@@ -50,24 +50,16 @@ def run_juju(*args: str, input: str | None = None) -> str:
     ).stdout
 
 
-def ensure_mysqlk8s_model():
-    try:
-        run_command(f'juju show-model "{MYSQLK8S_MODEL}"')
-    except subprocess.CalledProcessError:
-        run_command(f'juju add-model "{MYSQLK8S_MODEL}" "{K8S_CLOUD}"')
-
-
 def configure_minio_for_mysql_backups():
+    run_command(f'juju add-model "{MYSQLK8S_MODEL}" "{K8S_CLOUD}"')
     if get_s3_integrator_config():
         os.environ.setdefault("K8S_CLOUD_NAME", K8S_CLOUD)
         os.environ.setdefault("MYSQLK8S_MODEL_NAME", MYSQLK8S_MODEL)
         os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_BUCKET", f"{MINIO_MODEL}-mysql-k8s")
         os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_PATH", f"/{MINIO_MODEL}/mysql-k8s")
-        ensure_mysqlk8s_model()
         return
 
     run_command(f'juju add-model "{MINIO_MODEL}" "{K8S_CLOUD}"')
-    ensure_mysqlk8s_model()
     run_command(
         f'juju deploy minio -m "{MINIO_MODEL}" '
         "--channel=ckf-1.10/stable "
@@ -80,7 +72,6 @@ def configure_minio_for_mysql_backups():
         '--query=\'name=="minio" && (status=="active" || status=="idle")\' '
         "--timeout=20m"
     )
-    ensure_mysqlk8s_model()
 
     k8s_status = json.loads(run_command(f'juju status -m "{K8S_HOST_MODEL}" --format=json'))
     load_balancer_cidrs = " ".join(
@@ -139,14 +130,18 @@ def configure_minio_for_mysql_backups():
         "-o jsonpath='{.status.loadBalancer.ingress[0].ip}'\""
     ).strip()
 
+    endpoint = f"http://{load_balancer_ip}:9000"
+    mysql_bucket = f"{MINIO_MODEL}-mysql"
+    mysql_k8s_bucket = f"{MINIO_MODEL}-mysql-k8s"
+
     os.environ.update(
         {
-            "S3_INTEGRATOR_ENDPOINT": f"http://{load_balancer_ip}:9000",
+            "S3_INTEGRATOR_ENDPOINT": endpoint,
             "S3_INTEGRATOR_ACCESS_KEY": MINIO_ACCESS_KEY,
             "S3_INTEGRATOR_SECRET_KEY": MINIO_SECRET_KEY,
-            "S3_INTEGRATOR_BUCKET": f"{MINIO_MODEL}-mysql",
+            "S3_INTEGRATOR_BUCKET": mysql_bucket,
             "S3_INTEGRATOR_PATH": f"/{MINIO_MODEL}/mysql",
-            "S3_INTEGRATOR_MYSQLK8S_BUCKET": f"{MINIO_MODEL}-mysql-k8s",
+            "S3_INTEGRATOR_MYSQLK8S_BUCKET": mysql_k8s_bucket,
             "S3_INTEGRATOR_MYSQLK8S_PATH": f"/{MINIO_MODEL}/mysql-k8s",
             "K8S_CLOUD_NAME": K8S_CLOUD,
             "MYSQLK8S_MODEL_NAME": MYSQLK8S_MODEL,
@@ -226,7 +221,10 @@ async def test_build_and_deploy(ops_test):
         ).strip()
         run_juju("grant-secret", secret_id, "s3-integrator", "-m", ops_test.model.name)
         await s3_integrator.set_config({**s3_integrator_config, "credentials": secret_id})
-        await ops_test.model.relate("mysql", "s3-integrator")
+        await ops_test.model.wait_for_idle(
+            apps=["mysql"], timeout=WAIT_TIMEOUT, status="active", check_freq=3
+        )
+        await ops_test.model.integrate("mysql:s3-parameters", "s3-integrator:s3-credentials")
     await ops_test.model.deploy(
         "ch:postgresql",
         application_name="postgresql",
@@ -240,7 +238,7 @@ async def test_build_and_deploy(ops_test):
     await ops_test.model.deploy(
         "ch:easyrsa", application_name="easyrsa", series="jammy", channel="stable", num_units=1
     )
-    await ops_test.model.relate("etcd:certificates", "easyrsa:client")
+    await ops_test.model.integrate("etcd:certificates", "easyrsa:client")
 
     await ops_test.model.wait_for_idle(timeout=WAIT_TIMEOUT, status="active", check_freq=3)
 
@@ -257,22 +255,26 @@ async def test_build_and_deploy(ops_test):
             "ch:mysql-k8s",
             application_name="mysql-k8s",
             channel="8.0/stable",
+            config={"profile": "testing"},
             trust=True,
-            num_units=1,
+            num_units=3,
         )
         k8s_s3_integrator = await k8s_model.deploy(
-            "ch:s3-integrator", channel="1/stable", trust=True
+            "ch:s3-integrator", channel="2/stable", trust=True
         )
         await k8s_model.wait_for_idle(apps=["s3-integrator"], timeout=WAIT_TIMEOUT, check_freq=3)
-        action = await k8s_s3_integrator.units[0].run_action(
-            "sync-s3-credentials",
-            **{
-                "access-key": os.environ["S3_INTEGRATOR_ACCESS_KEY"],
-                "secret-key": os.environ["S3_INTEGRATOR_SECRET_KEY"],
-            },
+        k8s_secret_id = run_juju(
+            "add-secret",
+            "mysql-k8s-s3-credentials",
+            f"access-key={os.environ['S3_INTEGRATOR_ACCESS_KEY']}",
+            f"secret-key={os.environ['S3_INTEGRATOR_SECRET_KEY']}",
+            "-m",
+            k8s_model.name,
+        ).strip()
+        run_juju("grant-secret", k8s_secret_id, "s3-integrator", "-m", k8s_model.name)
+        await k8s_s3_integrator.set_config(
+            {**mysqlk8s_s3_integrator_config, "credentials": k8s_secret_id}
         )
-        await action.wait()
-        await k8s_s3_integrator.set_config(mysqlk8s_s3_integrator_config)
         await k8s_model.integrate("mysql-k8s", "s3-integrator")
         await k8s_model.wait_for_idle(timeout=WAIT_TIMEOUT, status="active", check_freq=3)
 

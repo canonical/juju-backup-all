@@ -187,6 +187,19 @@ jobs:
           echo "$TEST_SNAP"
           tox -e func -- --cloud localhost
 
+      - name: Collect Juju diagnostics on failure
+        if: failure()
+        run: |
+          for model in $(juju models --format=json | python3 -c \
+            'import json, sys; print(" ".join(m["short-name"] for m in json.load(sys.stdin)["models"]))'); do
+            echo "::group::status $model"
+            juju status -m "$model" --relations || true
+            echo "::endgroup::"
+            echo "::group::debug-log $model"
+            juju debug-log -m "$model" --replay --level ERROR --no-tail || true
+            echo "::endgroup::"
+          done
+
       - name: Create artifact name suffix
         run: |
           BASE_VERSION_SANITIZED=${{ matrix.runs-on }}
