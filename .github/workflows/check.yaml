@@ -185,7 +185,7 @@ jobs:
         run: |
           export TEST_SNAP="$(pwd)/$(ls | grep '.*_.*\.snap$')"
           echo "$TEST_SNAP"
-          tox -e func -- --cloud localhost
+          tox -e func -- --cloud localhost --keep-models
 
       - name: Collect Juju diagnostics on failure
         if: failure()
@@ -196,7 +196,7 @@ jobs:
             juju status -m "$model" --relations || true
             echo "::endgroup::"
             echo "::group::debug-log $model"
-            juju debug-log -m "$model" --replay --level ERROR --no-tail || true
+            juju debug-log -m "$model" --replay --level WARNING --no-tail --lines 300 || true
             echo "::endgroup::"
           done
 
