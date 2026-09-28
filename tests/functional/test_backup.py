@@ -55,12 +55,8 @@ def configure_minio_for_create_backups():
     if get_s3_mysql_integrator_config():
         os.environ.setdefault("K8S_CLOUD_NAME", K8S_CLOUD)
         os.environ.setdefault("MYSQLK8S_MODEL_NAME", MYSQLK8S_MODEL)
-        os.environ.setdefault(
-            "S3_INTEGRATOR_POSTGRESQL_BUCKET", f"{MINIO_MODEL}-postgresql"
-        )
-        os.environ.setdefault(
-            "S3_INTEGRATOR_POSTGRESQL_PATH", f"/{MINIO_MODEL}/postgresql"
-        )
+        os.environ.setdefault("S3_INTEGRATOR_POSTGRESQL_BUCKET", f"{MINIO_MODEL}-postgresql")
+        os.environ.setdefault("S3_INTEGRATOR_POSTGRESQL_PATH", f"/{MINIO_MODEL}/postgresql")
         os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_BUCKET", f"{MINIO_MODEL}-mysql-k8s")
         os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_PATH", f"/{MINIO_MODEL}/mysql-k8s")
         return
@@ -139,30 +135,10 @@ def configure_minio_for_create_backups():
         "-o jsonpath='{.status.loadBalancer.ingress[0].ip}'\""
     ).strip()
 
-    with tempfile.TemporaryDirectory() as certificate_directory:
-        certificate_path = Path(certificate_directory) / "minio.crt"
-        key_path = Path(certificate_directory) / "minio.key"
-        run_command(
-            "openssl req -x509 -newkey rsa:2048 -nodes "
-            f'-keyout "{key_path}" -out "{certificate_path}" -days 365 '
-            f'-subj "/CN={load_balancer_ip}" '
-            f'-addext "subjectAltName=IP:{load_balancer_ip}"'
-        )
-        certificate = base64.b64encode(certificate_path.read_bytes()).decode()
-        private_key = base64.b64encode(key_path.read_bytes()).decode()
-        run_command(
-            f'juju config minio -m "{MINIO_MODEL}" '
-            f'ssl-cert="{certificate}" ssl-key="{private_key}"'
-        )
-
-    run_command(
-        f'juju wait-for application -m "{MINIO_MODEL}" minio '
-        "--query='status==\"active\"' --timeout=20m"
-    )
-
     os.environ.update(
         {
             "S3_INTEGRATOR_ENDPOINT": f"http://{load_balancer_ip}:9000",
+            "MINIO_LOAD_BALANCER_IP": load_balancer_ip,
             "S3_INTEGRATOR_ACCESS_KEY": MINIO_ACCESS_KEY,
             "S3_INTEGRATOR_SECRET_KEY": MINIO_SECRET_KEY,
             "S3_INTEGRATOR_MYSQL_BUCKET": f"{MINIO_MODEL}-mysql",
@@ -173,7 +149,6 @@ def configure_minio_for_create_backups():
             "S3_INTEGRATOR_MYSQLK8S_PATH": f"/{MINIO_MODEL}/mysql-k8s",
             "K8S_CLOUD_NAME": K8S_CLOUD,
             "MYSQLK8S_MODEL_NAME": MYSQLK8S_MODEL,
-            "S3_INTEGRATOR_TLS_CA_CHAIN": certificate,
         }
     )
 
@@ -197,21 +172,68 @@ def _get_s3_integrator_config(bucket_variable, path_variable):
         "region": "us-east-1",
         "s3-uri-style": "path",
     }
-    if os.environ.get("S3_INTEGRATOR_TLS_CA_CHAIN"):
-        config["tls-ca-chain"] = os.environ["S3_INTEGRATOR_TLS_CA_CHAIN"]
     return config
 
 
 def get_s3_mysql_integrator_config():
-    return _get_s3_integrator_config(
-        "S3_INTEGRATOR_MYSQL_BUCKET", "S3_INTEGRATOR_MYSQL_PATH"
-    )
+    return _get_s3_integrator_config("S3_INTEGRATOR_MYSQL_BUCKET", "S3_INTEGRATOR_MYSQL_PATH")
 
 
 def get_s3_postgresql_integrator_config():
-    return _get_s3_integrator_config(
+    config = _get_s3_integrator_config(
         "S3_INTEGRATOR_POSTGRESQL_BUCKET", "S3_INTEGRATOR_POSTGRESQL_PATH"
     )
+    if config and os.environ.get("S3_INTEGRATOR_TLS_CA_CHAIN"):
+        config["endpoint"] = config["endpoint"].replace("http://", "https://", 1)
+        config["tls-ca-chain"] = os.environ["S3_INTEGRATOR_TLS_CA_CHAIN"]
+    return config
+
+
+def configure_minio_tls_for_postgresql_backup(model_name):
+    load_balancer_ip = os.environ.get("MINIO_LOAD_BALANCER_IP")
+    if not load_balancer_ip:
+        return
+
+    if not os.environ.get("S3_INTEGRATOR_TLS_CA_CHAIN"):
+        with tempfile.TemporaryDirectory() as certificate_directory:
+            certificate_path = Path(certificate_directory) / "minio.crt"
+            key_path = Path(certificate_directory) / "minio.key"
+            run_command(
+                "openssl req -x509 -newkey rsa:2048 -nodes "
+                f'-keyout "{key_path}" -out "{certificate_path}" -days 365 '
+                f'-subj "/CN={load_balancer_ip}" '
+                f'-addext "subjectAltName=IP:{load_balancer_ip}"'
+            )
+            certificate = base64.b64encode(certificate_path.read_bytes()).decode()
+            private_key = base64.b64encode(key_path.read_bytes()).decode()
+            run_command(
+                f'juju config minio -m "{MINIO_MODEL}" '
+                f'ssl-cert="{certificate}" ssl-key="{private_key}"'
+            )
+        os.environ["S3_INTEGRATOR_TLS_CA_CHAIN"] = certificate
+        run_command(
+            f'juju wait-for application -m "{MINIO_MODEL}" minio '
+            "--query='status==\"active\"' --timeout=20m"
+        )
+
+    postgresql_config = get_s3_postgresql_integrator_config()
+    run_juju(
+        "config",
+        "s3-integrator-postgresql",
+        *(f"{key}={value}" for key, value in postgresql_config.items()),
+        "-m",
+        model_name,
+    )
+    for application_name in ("postgresql", "s3-integrator-postgresql"):
+        run_juju(
+            "wait-for",
+            "application",
+            "-m",
+            model_name,
+            application_name,
+            '--query=status=="active"',
+            "--timeout=20m",
+        )
 
 
 def get_mysqlk8s_s3_integrator_config():
@@ -271,18 +293,12 @@ async def test_build_and_deploy(ops_test):
             "-m",
             ops_test.model.name,
         ).strip()
-        run_juju(
-            "grant-secret", secret_id, "s3-integrator-mysql", "-m", ops_test.model.name
-        )
-        await mysql_s3_integrator.set_config(
-            {**s3_integrator_config, "credentials": secret_id}
-        )
+        run_juju("grant-secret", secret_id, "s3-integrator-mysql", "-m", ops_test.model.name)
+        await mysql_s3_integrator.set_config({**s3_integrator_config, "credentials": secret_id})
         await ops_test.model.wait_for_idle(
             apps=["mysql"], timeout=WAIT_TIMEOUT, status="active", check_freq=3
         )
-        await ops_test.model.integrate(
-            "mysql:s3-parameters", "s3-integrator-mysql:s3-credentials"
-        )
+        await ops_test.model.integrate("mysql:s3-parameters", "s3-integrator-mysql:s3-credentials")
     await ops_test.model.deploy(
         "ch:postgresql",
         application_name="postgresql",
@@ -448,6 +464,7 @@ def test_mysql_operator_k8s_backup(ops_test, tmp_path: Path):
 
 @pytest.mark.parametrize("backup_location", ["/home/ubuntu", "/home/ubuntu/abc"])
 def test_postgresql_backup(backup_location, ops_test, tmp_path: Path):
+    configure_minio_tls_for_postgresql_backup(ops_test.model.name)
     postgresql_app_name = "postgresql"
     model_name = ops_test.model.name
     controller_name = ops_test.controller_name
