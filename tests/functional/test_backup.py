@@ -35,8 +35,6 @@ MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin123"
 S3_INTEGRATOR_CONFIG_ENVIRONMENT_VARIABLES = (
     "S3_INTEGRATOR_ENDPOINT",
-    "S3_INTEGRATOR_BUCKET",
-    "S3_INTEGRATOR_PATH",
     "S3_INTEGRATOR_ACCESS_KEY",
     "S3_INTEGRATOR_SECRET_KEY",
 )
@@ -52,11 +50,17 @@ def run_juju(*args: str, input: str | None = None) -> str:
     ).stdout
 
 
-def configure_minio_for_mysql_backups():
+def configure_minio_for_create_backups():
     run_command(f'juju add-model "{MYSQLK8S_MODEL}" "{K8S_CLOUD}"')
-    if get_s3_integrator_config():
+    if get_s3_mysql_integrator_config():
         os.environ.setdefault("K8S_CLOUD_NAME", K8S_CLOUD)
         os.environ.setdefault("MYSQLK8S_MODEL_NAME", MYSQLK8S_MODEL)
+        os.environ.setdefault(
+            "S3_INTEGRATOR_POSTGRESQL_BUCKET", f"{MINIO_MODEL}-postgresql"
+        )
+        os.environ.setdefault(
+            "S3_INTEGRATOR_POSTGRESQL_PATH", f"/{MINIO_MODEL}/postgresql"
+        )
         os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_BUCKET", f"{MINIO_MODEL}-mysql-k8s")
         os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_PATH", f"/{MINIO_MODEL}/mysql-k8s")
         return
@@ -161,8 +165,10 @@ def configure_minio_for_mysql_backups():
             "S3_INTEGRATOR_ENDPOINT": f"http://{load_balancer_ip}:9000",
             "S3_INTEGRATOR_ACCESS_KEY": MINIO_ACCESS_KEY,
             "S3_INTEGRATOR_SECRET_KEY": MINIO_SECRET_KEY,
-            "S3_INTEGRATOR_BUCKET": f"{MINIO_MODEL}-mysql",
-            "S3_INTEGRATOR_PATH": f"/{MINIO_MODEL}/mysql",
+            "S3_INTEGRATOR_MYSQL_BUCKET": f"{MINIO_MODEL}-mysql",
+            "S3_INTEGRATOR_MYSQL_PATH": f"/{MINIO_MODEL}/mysql",
+            "S3_INTEGRATOR_POSTGRESQL_BUCKET": f"{MINIO_MODEL}-postgresql",
+            "S3_INTEGRATOR_POSTGRESQL_PATH": f"/{MINIO_MODEL}/postgresql",
             "S3_INTEGRATOR_MYSQLK8S_BUCKET": f"{MINIO_MODEL}-mysql-k8s",
             "S3_INTEGRATOR_MYSQLK8S_PATH": f"/{MINIO_MODEL}/mysql-k8s",
             "K8S_CLOUD_NAME": K8S_CLOUD,
@@ -172,18 +178,22 @@ def configure_minio_for_mysql_backups():
     )
 
 
-def get_s3_integrator_config():
+def _get_s3_integrator_config(bucket_variable, path_variable):
     missing_variables = [
         variable
-        for variable in S3_INTEGRATOR_CONFIG_ENVIRONMENT_VARIABLES
+        for variable in (
+            *S3_INTEGRATOR_CONFIG_ENVIRONMENT_VARIABLES,
+            bucket_variable,
+            path_variable,
+        )
         if not os.environ.get(variable)
     ]
     if missing_variables:
         return None
     config = {
         "endpoint": os.environ["S3_INTEGRATOR_ENDPOINT"],
-        "bucket": os.environ["S3_INTEGRATOR_BUCKET"],
-        "path": os.environ["S3_INTEGRATOR_PATH"],
+        "bucket": os.environ[bucket_variable],
+        "path": os.environ[path_variable],
         "region": "us-east-1",
         "s3-uri-style": "path",
     }
@@ -192,10 +202,22 @@ def get_s3_integrator_config():
     return config
 
 
+def get_s3_mysql_integrator_config():
+    return _get_s3_integrator_config(
+        "S3_INTEGRATOR_MYSQL_BUCKET", "S3_INTEGRATOR_MYSQL_PATH"
+    )
+
+
+def get_s3_postgresql_integrator_config():
+    return _get_s3_integrator_config(
+        "S3_INTEGRATOR_POSTGRESQL_BUCKET", "S3_INTEGRATOR_POSTGRESQL_PATH"
+    )
+
+
 def get_mysqlk8s_s3_integrator_config():
     # mysql-k8s lives in its own k8s model/cluster, it gets a dedicated bucket
     # on the same MinIO endpoint used by the machine mysql operator test.
-    base_config = get_s3_integrator_config()
+    base_config = get_s3_mysql_integrator_config()
     if not base_config or not all(
         os.environ.get(variable)
         for variable in (
@@ -215,7 +237,7 @@ def get_mysqlk8s_s3_integrator_config():
 @pytest.mark.skip_if_deployed
 async def test_build_and_deploy(ops_test):
     """Deploy all applications."""
-    configure_minio_for_mysql_backups()
+    configure_minio_for_create_backups()
 
     await ops_test.model.deploy(
         "ch:mysql-innodb-cluster",
@@ -224,7 +246,7 @@ async def test_build_and_deploy(ops_test):
         channel="8.0/stable",
         num_units=3,
     )
-    s3_integrator_config = get_s3_integrator_config()
+    s3_integrator_config = get_s3_mysql_integrator_config()
     if s3_integrator_config:
         await ops_test.model.deploy(
             "ch:mysql",
@@ -233,9 +255,13 @@ async def test_build_and_deploy(ops_test):
             channel="8.0/stable",
             num_units=3,
         )
-        s3_integrator = await ops_test.model.deploy("ch:s3-integrator", channel="2/stable")
+        mysql_s3_integrator = await ops_test.model.deploy(
+            "ch:s3-integrator",
+            application_name="s3-integrator-mysql",
+            channel="2/stable",
+        )
         await ops_test.model.wait_for_idle(
-            apps=["s3-integrator"], timeout=WAIT_TIMEOUT, check_freq=3
+            apps=["s3-integrator-mysql"], timeout=WAIT_TIMEOUT, check_freq=3
         )
         secret_id = run_juju(
             "add-secret",
@@ -245,12 +271,18 @@ async def test_build_and_deploy(ops_test):
             "-m",
             ops_test.model.name,
         ).strip()
-        run_juju("grant-secret", secret_id, "s3-integrator", "-m", ops_test.model.name)
-        await s3_integrator.set_config({**s3_integrator_config, "credentials": secret_id})
+        run_juju(
+            "grant-secret", secret_id, "s3-integrator-mysql", "-m", ops_test.model.name
+        )
+        await mysql_s3_integrator.set_config(
+            {**s3_integrator_config, "credentials": secret_id}
+        )
         await ops_test.model.wait_for_idle(
             apps=["mysql"], timeout=WAIT_TIMEOUT, status="active", check_freq=3
         )
-        await ops_test.model.integrate("mysql:s3-parameters", "s3-integrator:s3-credentials")
+        await ops_test.model.integrate(
+            "mysql:s3-parameters", "s3-integrator-mysql:s3-credentials"
+        )
     await ops_test.model.deploy(
         "ch:postgresql",
         application_name="postgresql",
@@ -258,13 +290,17 @@ async def test_build_and_deploy(ops_test):
         channel="14/stable",
         num_units=1,
     )
-    s3_integrator_config = get_s3_integrator_config()
+    s3_integrator_config = get_s3_postgresql_integrator_config()
     if s3_integrator_config:
-        s3_integrator = await ops_test.model.deploy("ch:s3-integrator", channel="1/stable")
-        await ops_test.model.wait_for_idle(
-            apps=["s3-integrator"], timeout=WAIT_TIMEOUT, check_freq=3
+        postgresql_s3_integrator = await ops_test.model.deploy(
+            "ch:s3-integrator",
+            application_name="s3-integrator-postgresql",
+            channel="1/stable",
         )
-        action = await s3_integrator.units[0].run_action(
+        await ops_test.model.wait_for_idle(
+            apps=["s3-integrator-postgresql"], timeout=WAIT_TIMEOUT, check_freq=3
+        )
+        action = await postgresql_s3_integrator.units[0].run_action(
             "sync-s3-credentials",
             **{
                 "access-key": os.environ["S3_INTEGRATOR_ACCESS_KEY"],
@@ -272,8 +308,8 @@ async def test_build_and_deploy(ops_test):
             },
         )
         await action.wait()
-        await s3_integrator.set_config(s3_integrator_config)
-        await ops_test.model.relate("postgresql", "s3-integrator")
+        await postgresql_s3_integrator.set_config(s3_integrator_config)
+        await ops_test.model.relate("postgresql", "s3-integrator-postgresql")
     await ops_test.model.deploy(
         "ch:etcd", application_name="etcd", series="jammy", channel="stable", num_units=1
     )
@@ -344,7 +380,7 @@ def test_mysql_innodb_backup(backup_location, ops_test, tmp_path: Path):
 
 
 def test_mysql_operator_backup(ops_test, tmp_path: Path):
-    if not get_s3_integrator_config():
+    if not get_s3_mysql_integrator_config():
         pytest.skip("requires S3_INTEGRATOR_* environment variables")
     mysql_app_name = "mysql"
     model_name = ops_test.model.name
