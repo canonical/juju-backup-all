@@ -1,10 +1,17 @@
 #!/usr/bin/python3
 """Unit tests for utils.py."""
+import json
 import unittest
 from concurrent.futures import TimeoutError
 from unittest.mock import ANY, Mock, patch
 
-from jujubackupall.errors import ActionError, JujuTimeoutError, ModelAccessError, NoLeaderError
+from jujubackupall.errors import (
+    ActionError,
+    JujuTimeoutError,
+    ModelAccessError,
+    NoLeaderError,
+    NoNonPrimaryError,
+)
 from jujubackupall.utils import (
     backup_controller,
     check_output_unit_action,
@@ -12,9 +19,74 @@ from jujubackupall.utils import (
     connect_model,
     get_all_controllers,
     get_leader,
+    get_non_primary,
     parse_charm_name,
     run_with_timeout,
 )
+
+
+def _mysql_unit(name):
+    unit = Mock()
+    unit.name = name
+    return unit
+
+
+class TestGetNonPrimary(unittest.TestCase):
+    topology = {
+        "mysql-0": {"memberRole": "PRIMARY", "status": "ONLINE"},
+        "mysql-1": {"memberRole": "SECONDARY", "status": "ONLINE"},
+    }
+
+    def test_single_unit_returns_that_unit(self):
+        unit = _mysql_unit("mysql/0")
+        self.assertIs(get_non_primary([unit], ANY), unit)
+
+    @patch("jujubackupall.utils.get_leader")
+    @patch("jujubackupall.utils.check_output_unit_action")
+    def test_skips_primary_when_status_is_json_string(self, mock_action: Mock, mock_leader: Mock):
+        units = [_mysql_unit("mysql/0"), _mysql_unit("mysql/1")]
+        mock_leader.return_value = units[0]
+        mock_action.return_value = {
+            "status": json.dumps({"defaultReplicaSet": {"topology": self.topology}})
+        }
+        self.assertIs(get_non_primary(units, ANY), units[1])
+
+    @patch("jujubackupall.utils.get_leader")
+    @patch("jujubackupall.utils.check_output_unit_action")
+    def test_skips_primary_with_lowercased_nested_keys(self, mock_action: Mock, mock_leader: Mock):
+        units = [_mysql_unit("mysql/0"), _mysql_unit("mysql/1")]
+        mock_leader.return_value = units[0]
+        mock_action.return_value = {
+            "status": {
+                "defaultreplicaset": {
+                    "topology": {
+                        "mysql-0": {"memberrole": "PRIMARY", "status": "ONLINE"},
+                        "mysql-1": {"memberrole": "SECONDARY", "status": "ONLINE"},
+                    }
+                }
+            }
+        }
+        self.assertIs(get_non_primary(units, ANY), units[1])
+
+    @patch("jujubackupall.utils.get_leader")
+    @patch("jujubackupall.utils.check_output_unit_action")
+    def test_raises_when_only_offline_secondaries(self, mock_action: Mock, mock_leader: Mock):
+        units = [_mysql_unit("mysql/0"), _mysql_unit("mysql/1")]
+        mock_leader.return_value = units[0]
+        mock_action.return_value = {
+            "status": json.dumps(
+                {
+                    "defaultReplicaSet": {
+                        "topology": {
+                            "mysql-0": {"memberRole": "PRIMARY", "status": "ONLINE"},
+                            "mysql-1": {"memberRole": "SECONDARY", "status": "OFFLINE"},
+                        }
+                    }
+                }
+            )
+        }
+        with self.assertRaises(NoNonPrimaryError):
+            get_non_primary(units, ANY)
 
 
 class TestParseCharmName(unittest.TestCase):

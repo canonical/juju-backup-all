@@ -30,12 +30,12 @@ from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
 
 
 class TestGetCharmBackupInstance(unittest.TestCase):
-    @patch("jujubackupall.backup.get_non_leader")
+    @patch("jujubackupall.backup.get_non_primary")
     @patch("jujubackupall.backup.get_leader")
-    def test_get_backup_instance(self, mock_get_leader: Mock, mock_get_non_leader: Mock):
+    def test_get_backup_instance(self, mock_get_leader: Mock, mock_get_non_primary: Mock):
         mock_unit = Mock()
         mock_get_leader.return_value = mock_unit
-        mock_get_non_leader.return_value = mock_unit
+        mock_get_non_primary.return_value = mock_unit
         test_cases = [
             ("mysql-innodb-cluster", MysqlInnodbBackup),
             ("mysql", MysqlOperatorBackup),
@@ -56,7 +56,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                 )
                 self.assertIsInstance(backup_instance, expected_backup_class)
                 if charm_name == "mysql":
-                    mock_get_non_leader.assert_called_once()
+                    mock_get_non_primary.assert_called_once()
 
 
 class TestJujuControllerBackup(unittest.TestCase):

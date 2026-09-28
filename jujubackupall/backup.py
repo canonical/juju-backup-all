@@ -39,7 +39,7 @@ from jujubackupall.utils import (
     ensure_path_exists,
     get_datetime_string,
     get_leader,
-    get_non_leader,
+    get_non_primary,
     scp_from_unit,
     ssh_run_on_unit,
 )
@@ -385,10 +385,9 @@ def get_charm_backup_instance(
     timeout: int,
 ) -> CharmBackupType:
     if charm_name in (MysqlOperatorBackup.charm_name, MysqlOperatorK8sBackup.charm_name):
-        # For the MySQL operator charms, we need to get a non-leader unit to perform the backup.
-        # The charm would return a "Unit cannot perform backups as it is the cluster primary" error
-        # if we tried to perform the backup on the leader unit, unless we sets force to true.
-        unit = get_non_leader(units)
+        # The charm refuses to back up using the cluster primary.
+        # Note that the primary is not necessarily the leader.
+        unit = get_non_primary(units, timeout)
     else:
         unit = get_leader(units)
     if charm_name == MysqlInnodbBackup.charm_name:
