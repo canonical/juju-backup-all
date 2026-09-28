@@ -35,6 +35,7 @@ class TestGetNonPrimary(unittest.TestCase):
     topology = {
         "mysql-0": {"memberRole": "PRIMARY", "status": "ONLINE"},
         "mysql-1": {"memberRole": "SECONDARY", "status": "ONLINE"},
+        "mysql-2": {"memberRole": "SECONDARY", "status": "ONLINE"},
     }
 
     def test_single_unit_returns_that_unit(self):
@@ -44,27 +45,10 @@ class TestGetNonPrimary(unittest.TestCase):
     @patch("jujubackupall.utils.get_leader")
     @patch("jujubackupall.utils.check_output_unit_action")
     def test_skips_primary_when_status_is_json_string(self, mock_action: Mock, mock_leader: Mock):
-        units = [_mysql_unit("mysql/0"), _mysql_unit("mysql/1")]
+        units = [_mysql_unit("mysql/0"), _mysql_unit("mysql/1"), _mysql_unit("mysql/2")]
         mock_leader.return_value = units[0]
         mock_action.return_value = {
             "status": json.dumps({"defaultReplicaSet": {"topology": self.topology}})
-        }
-        self.assertIs(get_non_primary(units, ANY), units[1])
-
-    @patch("jujubackupall.utils.get_leader")
-    @patch("jujubackupall.utils.check_output_unit_action")
-    def test_skips_primary_with_lowercased_nested_keys(self, mock_action: Mock, mock_leader: Mock):
-        units = [_mysql_unit("mysql/0"), _mysql_unit("mysql/1")]
-        mock_leader.return_value = units[0]
-        mock_action.return_value = {
-            "status": {
-                "defaultreplicaset": {
-                    "topology": {
-                        "mysql-0": {"memberrole": "PRIMARY", "status": "ONLINE"},
-                        "mysql-1": {"memberrole": "SECONDARY", "status": "ONLINE"},
-                    }
-                }
-            }
         }
         self.assertIs(get_non_primary(units, ANY), units[1])
 

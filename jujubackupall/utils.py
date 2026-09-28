@@ -97,6 +97,8 @@ def _lookup_ignoring_case(mapping: dict, name: str):
 def get_non_primary(units: List[Unit], timeout: int) -> Unit:
     """Return an online unit that is not the MySQL cluster primary.
 
+    However, if there is only one unit, the unit will be returned, even if it is primary.
+
     The MySQL charms reject backups on the cluster primary, which is not necessarily the
     Juju leader, so the primary is resolved from the charm's reported cluster topology.
     """

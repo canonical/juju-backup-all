@@ -130,18 +130,14 @@ def configure_minio_for_mysql_backups():
         "-o jsonpath='{.status.loadBalancer.ingress[0].ip}'\""
     ).strip()
 
-    endpoint = f"http://{load_balancer_ip}:9000"
-    mysql_bucket = f"{MINIO_MODEL}-mysql"
-    mysql_k8s_bucket = f"{MINIO_MODEL}-mysql-k8s"
-
     os.environ.update(
         {
-            "S3_INTEGRATOR_ENDPOINT": endpoint,
+            "S3_INTEGRATOR_ENDPOINT": f"http://{load_balancer_ip}:9000",
             "S3_INTEGRATOR_ACCESS_KEY": MINIO_ACCESS_KEY,
             "S3_INTEGRATOR_SECRET_KEY": MINIO_SECRET_KEY,
-            "S3_INTEGRATOR_BUCKET": mysql_bucket,
+            "S3_INTEGRATOR_BUCKET": f"{MINIO_MODEL}-mysql",
             "S3_INTEGRATOR_PATH": f"/{MINIO_MODEL}/mysql",
-            "S3_INTEGRATOR_MYSQLK8S_BUCKET": mysql_k8s_bucket,
+            "S3_INTEGRATOR_MYSQLK8S_BUCKET": f"{MINIO_MODEL}-mysql-k8s",
             "S3_INTEGRATOR_MYSQLK8S_PATH": f"/{MINIO_MODEL}/mysql-k8s",
             "K8S_CLOUD_NAME": K8S_CLOUD,
             "MYSQLK8S_MODEL_NAME": MYSQLK8S_MODEL,
@@ -167,7 +163,7 @@ def get_s3_integrator_config():
 
 
 def get_mysqlk8s_s3_integrator_config():
-    # mysql-k8s lives in its own k8s model/cluster, so it gets a dedicated bucket
+    # mysql-k8s lives in its own k8s model/cluster, it gets a dedicated bucket
     # on the same MinIO endpoint used by the machine mysql operator test.
     base_config = get_s3_integrator_config()
     if not base_config or not all(

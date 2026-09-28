@@ -185,20 +185,7 @@ jobs:
         run: |
           export TEST_SNAP="$(pwd)/$(ls | grep '.*_.*\.snap$')"
           echo "$TEST_SNAP"
-          tox -e func -- --cloud localhost --keep-models
-
-      - name: Collect Juju diagnostics on failure
-        if: failure()
-        run: |
-          for model in $(juju models --format=json | python3 -c \
-            'import json, sys; print(" ".join(m["short-name"] for m in json.load(sys.stdin)["models"]))'); do
-            echo "::group::status $model"
-            juju status -m "$model" --relations || true
-            echo "::endgroup::"
-            echo "::group::debug-log $model"
-            juju debug-log -m "$model" --replay --level WARNING --no-tail --lines 300 || true
-            echo "::endgroup::"
-          done
+          tox -e func -- --cloud localhost
 
       - name: Create artifact name suffix
         run: |
