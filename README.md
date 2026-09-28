@@ -13,6 +13,8 @@ It currently supports backing up juju controllers, juju configs, and the followi
 - [MySQL](https://charmhub.io/mysql)
 - [PostgreSQL](https://charmhub.io/postgresql)
 - [etcd](https://charmhub.io/etcd)
+- [ZooKeeper](https://charmhub.io/zookeeper)
+- [ZooKeeper K8s](https://charmhub.io/zookeeper-k8s)
 
 This snap enumerates through all controllers, backing up the controller and scanning through each
 model for any applications that can be backed up. It then saves these backups.
