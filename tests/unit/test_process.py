@@ -325,7 +325,7 @@ class TestControllerProcessor(unittest.TestCase):
         mock_get_charm_backup_instance.return_value = mock_charm_backup_instance
 
         action_error = ActionError(Mock())
-        mock_charm_backup_instance.backup.side_effect = [action_error]
+        mock_charm_backup_instance.backup_action.side_effect = [action_error]
 
         controller_processor = self.create_controller_processor()
         controller_processor.backup_app(
@@ -350,7 +350,7 @@ class TestControllerProcessor(unittest.TestCase):
         mock_get_charm_backup_instance: Mock,
     ):
         metadata_error = BackupMetadataError("create-backup did not return backup metadata")
-        mock_get_charm_backup_instance.return_value.backup.side_effect = metadata_error
+        mock_get_charm_backup_instance.return_value.backup_action.side_effect = metadata_error
         self.mock_controller.controller_name = "my-controller"
 
         controller_processor = self.create_controller_processor()
