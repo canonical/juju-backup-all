@@ -41,7 +41,7 @@ from jujubackupall.errors import (
     BackupMetadataError,
     JujuTimeoutError,
     NoLeaderError,
-    NoNonLeaderError,
+    NoNonPrimaryError,
 )
 from jujubackupall.utils import (
     connect_controller,
@@ -212,7 +212,7 @@ class ControllerProcessor:
             ActionError,
             BackupMetadataError,
             NoLeaderError,
-            NoNonLeaderError,
+            NoNonPrimaryError,
             JujuError,
             JujuTimeoutError,
         ) as error:

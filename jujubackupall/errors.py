@@ -103,14 +103,14 @@ class NoLeaderError(Exception):
         )
 
 
-class NoNonLeaderError(Exception):
+class NoNonPrimaryError(Exception):
     def __init__(self, units: List[Unit]):
         super().__init__()
         self.units = units
 
     def __str__(self):
-        """Return string representation of NoNonLeaderError."""
-        return "{}: No non-leader unit could be found for units: {}".format(
+        """Return string representation of NoNonPrimaryError."""
+        return "{}: No online non-primary unit could be found for units: {}".format(
             self.__class__.__name__, self.units
         )
 

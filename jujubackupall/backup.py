@@ -39,7 +39,7 @@ from jujubackupall.utils import (
     ensure_path_exists,
     get_datetime_string,
     get_leader,
-    get_non_leader,
+    get_non_primary,
     scp_from_unit,
     ssh_run_on_unit,
 )
@@ -133,6 +133,12 @@ class MysqlOperatorBackup(CharmBackup):
         metadata_path = save_path / metadata_filename
         metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
         return metadata_path.absolute()
+
+
+class MysqlOperatorK8sBackup(MysqlOperatorBackup):
+    """Back up the MySQL Operator k8s charm through its S3-backed create-backup action."""
+
+    charm_name = "mysql-k8s"
 
 
 class MysqlInnodbBackup(MysqlDumpBackup):
@@ -378,11 +384,10 @@ def get_charm_backup_instance(
     backup_location_on_etcd: Path,
     timeout: int,
 ) -> CharmBackupType:
-    if charm_name == MysqlOperatorBackup.charm_name:
-        # For the MySQL operator charm, we need to get a non-leader unit to perform the backup.
-        # The charm would return a "Unit cannot perform backups as it is the cluster primary" error
-        # if we tried to perform the backup on the leader unit.
-        unit = get_non_leader(units)
+    if charm_name in (MysqlOperatorBackup.charm_name, MysqlOperatorK8sBackup.charm_name):
+        # The charm refuses to back up using the cluster primary.
+        # Note that the primary is not necessarily the leader.
+        unit = get_non_primary(units, timeout)
     else:
         unit = get_leader(units)
     if charm_name == MysqlInnodbBackup.charm_name:
@@ -391,6 +396,10 @@ def get_charm_backup_instance(
         )
     if charm_name == MysqlOperatorBackup.charm_name:
         return MysqlOperatorBackup(
+            unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout
+        )
+    if charm_name == MysqlOperatorK8sBackup.charm_name:
+        return MysqlOperatorK8sBackup(
             unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout
         )
     if charm_name == EtcdBackup.charm_name:

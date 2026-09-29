@@ -15,6 +15,7 @@ description: |
   * postgresql
   * mysql-innodb-cluster
   * mysql
+  * mysql-k8s
 
   Supported juju backups:
   * Juju configs

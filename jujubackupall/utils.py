@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 """Module that provides utility functions."""
+import json
 import os
 from asyncio import TimeoutError as AIOTimeoutError
 from asyncio import wait_for
@@ -39,7 +40,7 @@ from jujubackupall.errors import (
     JujuTimeoutError,
     ModelAccessError,
     NoLeaderError,
-    NoNonLeaderError,
+    NoNonPrimaryError,
 )
 
 
@@ -85,12 +86,43 @@ def get_leader(units: List[Unit]) -> Unit:
     raise NoLeaderError(units=units)
 
 
-def get_non_leader(units: List[Unit]) -> Unit:
+def _lookup_ignoring_case(mapping: dict, name: str):
+    # Charm revisions differ in the casing they use for cluster status keys.
+    for key, value in mapping.items():
+        if key.lower() == name.lower():
+            return value
+    return None
+
+
+def get_non_primary(units: List[Unit], timeout: int) -> Unit:
+    """Return an online unit that is not the MySQL cluster primary.
+
+    However, if there is only one unit, the unit will be returned, even if it is primary.
+
+    The MySQL charms reject backups on the cluster primary, which is not necessarily the
+    Juju leader, so the primary is resolved from the charm's reported cluster topology.
+    """
+    if len(units) == 1:
+        return units[0]
+
+    action_output = check_output_unit_action(get_leader(units), "get-cluster-status", timeout)
+    status = _lookup_ignoring_case(action_output, "status") or {}
+    if isinstance(status, str):
+        status = json.loads(status)
+    replica_set = _lookup_ignoring_case(status, "defaultReplicaSet") or {}
+    topology = _lookup_ignoring_case(replica_set, "topology") or {}
+
+    eligible_unit_names = set()
+    for label, member in topology.items():
+        role = str(_lookup_ignoring_case(member, "memberRole") or "").upper()
+        state = str(_lookup_ignoring_case(member, "status") or "").upper()
+        if role != "PRIMARY" and state == "ONLINE":
+            eligible_unit_names.add("/".join(label.rsplit("-", 1)))
+
     for unit in units:
-        is_leader = run_async(unit.is_leader_from_status())
-        if not is_leader:
+        if unit.name in eligible_unit_names:
             return unit
-    raise NoNonLeaderError(units=units)
+    raise NoNonPrimaryError(units=units)
 
 
 def parse_charm_name(charm_url: str) -> str:
