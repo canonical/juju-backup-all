@@ -16,6 +16,7 @@ from jujubackupall.backup import (
     MysqlOperatorBackup,
     MysqlOperatorK8sBackup,
     PostgresqlBackup,
+    PostgresqlK8sBackup,
     SwiftBackup,
     get_charm_backup_instance,
 )
@@ -46,6 +47,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
             ("mysql-k8s", MysqlOperatorK8sBackup),
             ("etcd", EtcdBackup),
             ("postgresql", PostgresqlBackup),
+            ("postgresql-k8s", PostgresqlK8sBackup),
             ("swift-proxy", SwiftBackup),
         ]
         for charm_name, expected_backup_class in test_cases:
@@ -61,8 +63,30 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                 self.assertIsInstance(backup_instance, expected_backup_class)
                 if charm_name == "mysql":
                     mock_get_non_primary.assert_called_once()
-                if charm_name == "postgresql":
+                elif charm_name == "postgresql":
                     mock_get_primary.assert_called_once()
+                elif charm_name == "postgresql-k8s":
+                    mock_get_primary.assert_called_once()
+
+    @patch("jujubackupall.backup.get_primary")
+    def test_postgresql_k8s_uses_primary_unit(self, mock_get_primary: Mock):
+        primary_unit = Mock()
+        primary_unit.name = "postgresql/1"
+        mock_get_primary.return_value = primary_unit
+        units = [Mock(), primary_unit]
+
+        backup_instance = get_charm_backup_instance(
+            "postgresql-k8s",
+            units,
+            Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+            Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+            Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+            ANY,
+        )
+
+        self.assertIsInstance(backup_instance, PostgresqlK8sBackup)
+        self.assertIs(backup_instance.unit, primary_unit)
+        mock_get_primary.assert_called_once_with(units, ANY)
 
 
 class TestJujuControllerBackup(unittest.TestCase):

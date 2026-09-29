@@ -202,6 +202,12 @@ class PostgresqlBackup(CharmBackup):
         return metadata_path.absolute()
 
 
+class PostgresqlK8sBackup(PostgresqlBackup):
+    """Back up the PostgreSQL k8s charm through its S3-backed backup action."""
+
+    charm_name = "postgresql-k8s"
+
+
 class SwiftBackup(CharmBackup):
     charm_name = "swift-proxy"
 
@@ -418,7 +424,7 @@ def get_charm_backup_instance(
         # The charm refuses to back up using the cluster primary.
         # Note that the primary is not necessarily the leader.
         unit = get_non_primary(units, timeout)
-    elif charm_name == PostgresqlBackup.charm_name:
+    elif charm_name == PostgresqlBackup.charm_name or charm_name == PostgresqlK8sBackup.charm_name:
         unit = get_primary(units, timeout)
     else:
         unit = get_leader(units)
@@ -438,6 +444,12 @@ def get_charm_backup_instance(
         return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd, timeout=timeout)
     if charm_name == PostgresqlBackup.charm_name:
         return PostgresqlBackup(
+            unit=unit,
+            backup_basedir=backup_location_on_postgresql,
+            timeout=timeout,
+        )
+    if charm_name == PostgresqlK8sBackup.charm_name:
+        return PostgresqlK8sBackup(
             unit=unit,
             backup_basedir=backup_location_on_postgresql,
             timeout=timeout,
