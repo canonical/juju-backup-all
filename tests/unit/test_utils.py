@@ -11,6 +11,7 @@ from jujubackupall.errors import (
     ModelAccessError,
     NoLeaderError,
     NoNonPrimaryError,
+    NoPrimaryError,
 )
 from jujubackupall.utils import (
     backup_controller,
@@ -20,6 +21,7 @@ from jujubackupall.utils import (
     get_all_controllers,
     get_leader,
     get_non_primary,
+    get_primary,
     parse_charm_name,
     run_with_timeout,
 )
@@ -71,6 +73,30 @@ class TestGetNonPrimary(unittest.TestCase):
         }
         with self.assertRaises(NoNonPrimaryError):
             get_non_primary(units, ANY)
+
+
+class TestGetPrimary(unittest.TestCase):
+    @patch("jujubackupall.utils.get_leader")
+    @patch("jujubackupall.utils.check_output_unit_action")
+    def test_returns_primary_from_action(self, mock_action: Mock, mock_leader: Mock):
+        units = [_mysql_unit("postgresql/0"), _mysql_unit("postgresql/1")]
+        mock_leader.return_value = units[0]
+        mock_action.return_value = {"primary": "postgresql/1"}
+
+        self.assertIs(get_primary(units, ANY), units[1])
+        mock_action.assert_called_once_with(units[0], "get-primary", ANY)
+
+    @patch("jujubackupall.utils.get_leader")
+    @patch("jujubackupall.utils.check_output_unit_action")
+    def test_raises_when_action_does_not_identify_a_unit(
+        self, mock_action: Mock, mock_leader: Mock
+    ):
+        units = [_mysql_unit("postgresql/0")]
+        mock_leader.return_value = units[0]
+        mock_action.return_value = {}
+
+        with self.assertRaises(NoPrimaryError):
+            get_primary(units, ANY)
 
 
 class TestParseCharmName(unittest.TestCase):

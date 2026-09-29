@@ -41,6 +41,7 @@ from jujubackupall.errors import (
     ModelAccessError,
     NoLeaderError,
     NoNonPrimaryError,
+    NoPrimaryError,
 )
 
 
@@ -123,6 +124,16 @@ def get_non_primary(units: List[Unit], timeout: int) -> Unit:
         if unit.name in eligible_unit_names:
             return unit
     raise NoNonPrimaryError(units=units)
+
+
+def get_primary(units: List[Unit], timeout: int) -> Unit:
+    """Return the PostgreSQL primary identified by the get-primary action."""
+    action_output = check_output_unit_action(get_leader(units), "get-primary", timeout)
+    primary_name = action_output.get("primary")
+    for unit in units:
+        if unit.name == primary_name:
+            return unit
+    raise NoPrimaryError(units=units)
 
 
 def parse_charm_name(charm_url: str) -> str:

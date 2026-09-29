@@ -115,6 +115,18 @@ class NoNonPrimaryError(Exception):
         )
 
 
+class NoPrimaryError(Exception):
+    def __init__(self, units: List[Unit]):
+        super().__init__()
+        self.units = units
+
+    def __str__(self):
+        """Return string representation of NoPrimaryError."""
+        return "{}: No primary could be found for units: {}".format(
+            self.__class__.__name__, self.units
+        )
+
+
 class JujuTimeoutError(Exception):
     def __init__(self, message):
         super().__init__()

@@ -32,10 +32,14 @@ from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
 class TestGetCharmBackupInstance(unittest.TestCase):
     @patch("jujubackupall.backup.get_non_primary")
     @patch("jujubackupall.backup.get_leader")
-    def test_get_backup_instance(self, mock_get_leader: Mock, mock_get_non_primary: Mock):
+    @patch("jujubackupall.backup.get_primary")
+    def test_get_backup_instance(
+        self, mock_get_primary: Mock, mock_get_leader: Mock, mock_get_non_primary: Mock
+    ):
         mock_unit = Mock()
         mock_get_leader.return_value = mock_unit
         mock_get_non_primary.return_value = mock_unit
+        mock_get_primary.return_value = mock_unit
         test_cases = [
             ("mysql-innodb-cluster", MysqlInnodbBackup),
             ("mysql", MysqlOperatorBackup),
@@ -57,6 +61,8 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                 self.assertIsInstance(backup_instance, expected_backup_class)
                 if charm_name == "mysql":
                     mock_get_non_primary.assert_called_once()
+                if charm_name == "postgresql":
+                    mock_get_primary.assert_called_once()
 
 
 class TestJujuControllerBackup(unittest.TestCase):

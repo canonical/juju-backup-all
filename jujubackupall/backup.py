@@ -40,6 +40,7 @@ from jujubackupall.utils import (
     get_datetime_string,
     get_leader,
     get_non_primary,
+    get_primary,
     scp_from_unit,
     ssh_run_on_unit,
 )
@@ -417,6 +418,8 @@ def get_charm_backup_instance(
         # The charm refuses to back up using the cluster primary.
         # Note that the primary is not necessarily the leader.
         unit = get_non_primary(units, timeout)
+    elif charm_name == PostgresqlBackup.charm_name:
+        unit = get_primary(units, timeout)
     else:
         unit = get_leader(units)
     if charm_name == MysqlInnodbBackup.charm_name:
