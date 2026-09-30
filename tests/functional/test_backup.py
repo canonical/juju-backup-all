@@ -85,7 +85,7 @@ def test_build_and_deploy(
     minio_credentials = {"access-key": MINIO_ACCESS_KEY, "secret-key": MINIO_SECRET_KEY}
 
     juju_k8s.deploy(
-        "ch:minio",
+        "minio",
         channel="ckf-1.10/stable",
         trust=True,
         config=minio_credentials,
