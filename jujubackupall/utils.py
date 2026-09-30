@@ -37,6 +37,7 @@ from jujubackupall.async_handlers import run_async
 from jujubackupall.constants import MAX_FRAME_SIZE
 from jujubackupall.errors import (
     ActionError,
+    BackupMetadataError,
     JujuTimeoutError,
     ModelAccessError,
     NoLeaderError,
@@ -123,6 +124,16 @@ def get_non_primary(units: List[Unit], timeout: int) -> Unit:
         if unit.name in eligible_unit_names:
             return unit
     raise NoNonPrimaryError(units=units)
+
+
+def get_mongodb_primary(units: List[Unit], timeout: int) -> Unit:
+    """Return the MongoDB primary reported by the charm's get-primary action."""
+    action_output = check_output_unit_action(get_leader(units), "get-primary", timeout)
+    primary_name = action_output.get("replica-set-primary")
+    for unit in units:
+        if unit.name == primary_name:
+            return unit
+    raise BackupMetadataError("get-primary did not return a matching primary unit")
 
 
 def parse_charm_name(charm_url: str) -> str:

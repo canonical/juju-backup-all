@@ -22,6 +22,7 @@ SUPPORTED_BACKUP_CHARMS = [
     "mysql-innodb-cluster",
     "mysql",
     "mysql-k8s",
+    "mongodb",
     "etcd",
     "postgresql",
     "zookeeper",
