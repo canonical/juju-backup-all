@@ -11,6 +11,7 @@ command: `juju-backup-all`.
 It currently supports backing up juju controllers, juju configs, and the following charms:
 - [MySQL Innodb Cluster](https://charmhub.io/mysql-innodb-cluster)
 - [MySQL](https://charmhub.io/mysql)
+- [MySQL K8s](https://charmhub.io/mysql-k8s)
 - [PostgreSQL](https://charmhub.io/postgresql)
 - [etcd](https://charmhub.io/etcd)
 - [ZooKeeper](https://charmhub.io/zookeeper)
