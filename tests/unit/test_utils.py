@@ -54,6 +54,25 @@ class TestGetNonPrimary(unittest.TestCase):
 
     @patch("jujubackupall.utils.get_leader")
     @patch("jujubackupall.utils.check_output_unit_action")
+    def test_skips_primary_with_mixed_case_keys(self, mock_action: Mock, mock_leader: Mock):
+        # Some charm revisions report cluster status keys/values with different casing
+        # (e.g. "Status"/"MemberRole" instead of "status"/"memberRole", and
+        # "Online"/"Secondary" instead of all-uppercase). get_non_primary should still
+        # correctly identify the non-primary, online unit regardless of casing.
+        units = [_mysql_unit("mysql/0"), _mysql_unit("mysql/1"), _mysql_unit("mysql/2")]
+        mock_leader.return_value = units[0]
+        mixed_case_topology = {
+            "mysql-0": {"MemberRole": "Primary", "Status": "Online"},
+            "mysql-1": {"MemberRole": "Secondary", "Status": "Online"},
+            "mysql-2": {"MemberRole": "Secondary", "Status": "Online"},
+        }
+        mock_action.return_value = {
+            "Status": json.dumps({"DefaultReplicaSet": {"Topology": mixed_case_topology}})
+        }
+        self.assertIs(get_non_primary(units, ANY), units[1])
+
+    @patch("jujubackupall.utils.get_leader")
+    @patch("jujubackupall.utils.check_output_unit_action")
     def test_raises_when_only_offline_secondaries(self, mock_action: Mock, mock_leader: Mock):
         units = [_mysql_unit("mysql/0"), _mysql_unit("mysql/1")]
         mock_leader.return_value = units[0]

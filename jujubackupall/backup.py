@@ -108,37 +108,96 @@ class MysqlDumpBackup(CharmBackup, metaclass=ABCMeta):
         return super().download_backup(save_path)
 
 
-class MysqlOperatorBackup(CharmBackup):
-    """Back up the MySQL Operator charm through its S3-backed backup action."""
+class S3Backup(CharmBackup, metaclass=ABCMeta):
+    """Back up a charm through its S3-backed create-backup action.
 
-    charm_name = "mysql"
+    This covers charms that implement the common "create-backup" action pattern,
+    where the action uploads the backup to S3 (via a relation to the s3-integrator
+    charm) and returns metadata (including a backup-id) rather than a local file.
+    """
+
+    _backup_id: str
     backup_action_name = "create-backup"
+    list_backups_action_name = "list-backups"
 
-    def backup(self):
-        # Run and validate the create-backup action for the MySQL operator charm.
-        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
+    @property
+    def backup_id(self):
+        return self._backup_id
 
-        backup_id = action_output.get("backup-id")
-        self.backup_metadata = action_output
-
-        if not backup_id:
-            raise BackupMetadataError("create-backup did not return backup metadata")
+    @backup_id.setter
+    def backup_id(self, backup_id: str):
+        self._backup_id = backup_id
 
     def download_backup(self, save_path: Path) -> Path:
-        # The MySQL operator backup is not a file to SCP from the unit. Instead,
+        # The S3 backup is not a file to SCP from the unit. Instead,
         # store the metadata payload returned by the action in the configured
         # backup output directory.
         ensure_path_exists(path=save_path)
-        metadata_filename = "mysql-backup-metadata-{}.json".format(get_datetime_string())
+        metadata_filename = f"{self.charm_name}-backup-metadata-{get_datetime_string()}.txt"
         metadata_path = save_path / metadata_filename
-        metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
+        metadata_path.write_text(self.backup_id)
         return metadata_path.absolute()
 
 
-class MysqlOperatorK8sBackup(MysqlOperatorBackup):
+class MysqlBackup(S3Backup, metaclass=ABCMeta):
+    """Back up a MySQL VM and k8s charm through its S3-backed create-backup action."""
+
+    def backup(self):
+        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
+        self.backup_id = action_output.get("backup-id")
+
+        if not self.backup_id:
+            raise BackupMetadataError("create-backup did not return backup metadata")
+
+
+class ZooKeeperBackup(S3Backup, metaclass=ABCMeta):
+    """Back up a ZooKeeper VM and k8s charm through its S3-backed create-backup action."""
+
+    def backup(self):
+        check_output_unit_action(
+            self.unit,
+            self.backup_action_name,
+            self.timeout,
+        )
+
+        list_backups_output = check_output_unit_action(
+            self.unit,
+            self.list_backups_action_name,
+            self.timeout,
+        )
+        backups = json.loads(list_backups_output.get("backups", "[]"))
+        if not backups:
+            raise BackupMetadataError(f"list-backups action returned no backups for {self.unit}")
+
+        backup_id = backups[0].get("id")  # first backup in the list is the most recent one
+        if not backup_id:
+            raise BackupMetadataError(f"list-backups action returned no backup id for {self.unit}")
+
+        self.backup_id = backup_id
+
+
+class MysqlOperatorBackup(MysqlBackup):
+    """Back up the MySQL Operator charm through its S3-backed backup action."""
+
+    charm_name = "mysql"
+
+
+class MysqlK8sOperatorBackup(MysqlBackup):
     """Back up the MySQL Operator k8s charm through its S3-backed create-backup action."""
 
     charm_name = "mysql-k8s"
+
+
+class ZookeeperOperatorBackup(ZooKeeperBackup):
+    """Back up the ZooKeeper charm through its S3-backed backup action."""
+
+    charm_name = "zookeeper"
+
+
+class ZookeeperK8sOperatorBackup(ZooKeeperBackup):
+    """Back up the ZooKeeper K8s charm through its S3-backed backup action."""
+
+    charm_name = "zookeeper-k8s"
 
 
 class MysqlInnodbBackup(MysqlDumpBackup):
@@ -384,7 +443,7 @@ def get_charm_backup_instance(
     backup_location_on_etcd: Path,
     timeout: int,
 ) -> CharmBackupType:
-    if charm_name in (MysqlOperatorBackup.charm_name, MysqlOperatorK8sBackup.charm_name):
+    if charm_name in (MysqlOperatorBackup.charm_name, MysqlK8sOperatorBackup.charm_name):
         # The charm refuses to back up using the cluster primary.
         # Note that the primary is not necessarily the leader.
         unit = get_non_primary(units, timeout)
@@ -398,8 +457,8 @@ def get_charm_backup_instance(
         return MysqlOperatorBackup(
             unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout
         )
-    if charm_name == MysqlOperatorK8sBackup.charm_name:
-        return MysqlOperatorK8sBackup(
+    if charm_name == MysqlK8sOperatorBackup.charm_name:
+        return MysqlK8sOperatorBackup(
             unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout
         )
     if charm_name == EtcdBackup.charm_name:
@@ -407,6 +466,12 @@ def get_charm_backup_instance(
     if charm_name == PostgresqlBackup.charm_name:
         return PostgresqlBackup(
             unit=unit, backup_basedir=backup_location_on_postgresql, timeout=timeout
+        )
+    if charm_name == ZookeeperOperatorBackup.charm_name:
+        return ZookeeperOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
+    if charm_name == ZookeeperK8sOperatorBackup.charm_name:
+        return ZookeeperK8sOperatorBackup(
+            unit=unit, backup_basedir="/home/ubuntu", timeout=timeout
         )
     if charm_name == SwiftBackup.charm_name:  # Not implemented
         return SwiftBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)

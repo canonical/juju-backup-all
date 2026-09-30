@@ -13,10 +13,12 @@ from jujubackupall.backup import (
     JujuClientConfigBackup,
     JujuControllerBackup,
     MysqlInnodbBackup,
+    MysqlK8sOperatorBackup,
     MysqlOperatorBackup,
-    MysqlOperatorK8sBackup,
     PostgresqlBackup,
     SwiftBackup,
+    ZookeeperK8sOperatorBackup,
+    ZookeeperOperatorBackup,
     get_charm_backup_instance,
 )
 from jujubackupall.constants import (
@@ -39,13 +41,17 @@ class TestGetCharmBackupInstance(unittest.TestCase):
         test_cases = [
             ("mysql-innodb-cluster", MysqlInnodbBackup),
             ("mysql", MysqlOperatorBackup),
-            ("mysql-k8s", MysqlOperatorK8sBackup),
+            ("mysql-k8s", MysqlK8sOperatorBackup),
             ("etcd", EtcdBackup),
             ("postgresql", PostgresqlBackup),
             ("swift-proxy", SwiftBackup),
+            ("zookeeper", ZookeeperOperatorBackup),
+            ("zookeeper-k8s", ZookeeperK8sOperatorBackup),
         ]
         for charm_name, expected_backup_class in test_cases:
             with self.subTest(charm_name=charm_name, expected_backup_class=expected_backup_class):
+                mock_get_non_primary.reset_mock()
+                mock_get_leader.reset_mock()
                 backup_instance = get_charm_backup_instance(
                     charm_name,
                     [Mock()],
@@ -55,8 +61,13 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                     ANY,
                 )
                 self.assertIsInstance(backup_instance, expected_backup_class)
-                if charm_name == "mysql":
+                if charm_name in ("mysql", "mysql-k8s"):
                     mock_get_non_primary.assert_called_once()
+                    mock_get_leader.assert_not_called()
+                else:
+                    mock_get_non_primary.assert_not_called()
+                    if charm_name in ("zookeeper", "zookeeper-k8s"):
+                        mock_get_leader.assert_called()
 
 
 class TestJujuControllerBackup(unittest.TestCase):
@@ -229,7 +240,7 @@ class TestMysqlOperatorBackup(unittest.TestCase):
         backup = MysqlOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
         backup.backup()
 
-        self.assertEqual(backup.backup_metadata, mock_check_output_unit_action.return_value)
+        self.assertEqual(backup.backup_id, "backup-123")
         mock_check_output_unit_action.assert_called_once_with(
             mock_unit,
             "create-backup",
@@ -247,14 +258,168 @@ class TestMysqlOperatorBackup(unittest.TestCase):
     def test_download_backup_mysql_operator(self, mock_ensure_path_exists: Mock):
         mock_unit = Mock()
         backup = MysqlOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
-        backup.backup_metadata = {"backup-id": "backup-123"}
-        backup.backup_filepath = Path("backup-123")
+        backup.backup_id = "backup-123"
 
         with patch.object(Path, "write_text", autospec=True) as mock_write_text:
             result = backup.download_backup(Path("/tmp/backup-output"))
 
         mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
         self.assertTrue(str(result).startswith("/tmp/backup-output/"))
+        self.assertIn("mysql-backup-metadata-", str(result))
+        mock_write_text.assert_called_once()
+
+
+class TestZookeeperOperatorBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_zookeeper(self, mock_check_output_unit_action: Mock):
+        mock_unit = Mock()
+        mock_check_output_unit_action.side_effect = [
+            {"return-code": 0},
+            {"backups": json.dumps([{"id": "backup-123"}])},
+        ]
+
+        backup = ZookeeperOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup()
+
+        self.assertEqual(backup.backup_id, "backup-123")
+        self.assertEqual(mock_check_output_unit_action.call_count, 2)
+        mock_check_output_unit_action.assert_any_call(
+            mock_unit,
+            "create-backup",
+            DEFAULT_TASK_TIMEOUT,
+        )
+        mock_check_output_unit_action.assert_any_call(
+            mock_unit,
+            "list-backups",
+            DEFAULT_TASK_TIMEOUT,
+        )
+
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_zookeeper_empty_backups_raises(self, mock_check_output_unit_action: Mock):
+        mock_check_output_unit_action.side_effect = [
+            {"return-code": 1},
+            {"backups": json.dumps([])},
+        ]
+        backup = ZookeeperOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_zookeeper_backup_missing_id_raises(self, mock_check_output_unit_action: Mock):
+        # "backups" list is non-empty, but the first entry has no "id" key.
+        mock_check_output_unit_action.side_effect = [
+            {"return-code": 0},
+            {"backups": json.dumps([{"not_id": "x"}])},
+        ]
+        backup = ZookeeperOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_zookeeper_missing_backups_key(self, mock_check_output_unit_action: Mock):
+        # "backups" key missing entirely from action output should be treated
+        # the same as an empty backups list, rather than raising a TypeError.
+        mock_check_output_unit_action.side_effect = [
+            {"return-code": 0},
+            {},
+        ]
+        backup = ZookeeperOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.ensure_path_exists")
+    def test_download_backup_zookeeper(self, mock_ensure_path_exists: Mock):
+        mock_unit = Mock()
+        backup = ZookeeperOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup_id = "backup-123"
+
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(Path("/tmp/backup-output"))
+
+        mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
+        self.assertTrue(str(result).startswith("/tmp/backup-output/"))
+        self.assertIn("zookeeper-backup-metadata-", str(result))
+        mock_write_text.assert_called_once()
+
+
+class TestZookeeperK8sOperatorBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_zookeeper_k8s(self, mock_check_output_unit_action: Mock):
+        mock_unit = Mock()
+        mock_check_output_unit_action.side_effect = [
+            {"return-code": 0},
+            {"backups": json.dumps([{"id": "backup-123"}])},
+        ]
+
+        backup = ZookeeperK8sOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup()
+
+        self.assertEqual(backup.backup_id, "backup-123")
+        self.assertEqual(mock_check_output_unit_action.call_count, 2)
+        mock_check_output_unit_action.assert_any_call(
+            mock_unit,
+            "create-backup",
+            DEFAULT_TASK_TIMEOUT,
+        )
+        mock_check_output_unit_action.assert_any_call(
+            mock_unit,
+            "list-backups",
+            DEFAULT_TASK_TIMEOUT,
+        )
+
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_zookeeper_k8s_empty_backups_raises(self, mock_check_output_unit_action: Mock):
+        mock_check_output_unit_action.side_effect = [
+            {"return-code": 1},
+            {"backups": json.dumps([])},
+        ]
+        backup = ZookeeperK8sOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_zookeeper_k8s_backup_missing_id_raises(
+        self, mock_check_output_unit_action: Mock
+    ):
+        # "backups" list is non-empty, but the first entry has no "id" key.
+        mock_check_output_unit_action.side_effect = [
+            {"return-code": 0},
+            {"backups": json.dumps([{"not_id": "x"}])},
+        ]
+        backup = ZookeeperK8sOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_zookeeper_k8s_missing_backups_key(self, mock_check_output_unit_action: Mock):
+        # "backups" key missing entirely from action output should be treated
+        # the same as an empty backups list, rather than raising a TypeError.
+        mock_check_output_unit_action.side_effect = [
+            {"return-code": 0},
+            {},
+        ]
+        backup = ZookeeperK8sOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.ensure_path_exists")
+    def test_download_backup_zookeeper_k8s(self, mock_ensure_path_exists: Mock):
+        mock_unit = Mock()
+        backup = ZookeeperK8sOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup_id = "backup-123"
+
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(Path("/tmp/backup-output"))
+
+        mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
+        self.assertTrue(str(result).startswith("/tmp/backup-output/"))
+        self.assertIn("zookeeper-k8s-backup-metadata-", str(result))
         mock_write_text.assert_called_once()
 
 
@@ -264,15 +429,36 @@ class TestMysqlK8sOperatorBackup(unittest.TestCase):
         mock_unit = Mock()
         mock_check_output_unit_action.return_value = {"backup-id": "backup-123"}
 
-        backup = MysqlOperatorK8sBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup = MysqlK8sOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
         backup.backup()
 
-        self.assertEqual(backup.backup_metadata, mock_check_output_unit_action.return_value)
+        self.assertEqual(backup.backup_id, mock_check_output_unit_action.return_value["backup-id"])
         mock_check_output_unit_action.assert_called_once_with(
             mock_unit,
             "create-backup",
             DEFAULT_TASK_TIMEOUT,
         )
+
+    @patch("jujubackupall.backup.check_output_unit_action", return_value={})
+    def test_backup_mysql_k8s_requires_backup_id(self, mock_check_output_unit_action: Mock):
+        backup = MysqlK8sOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.ensure_path_exists")
+    def test_download_backup_mysql_k8s(self, mock_ensure_path_exists: Mock):
+        mock_unit = Mock()
+        backup = MysqlK8sOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup_id = "backup-123"
+
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(Path("/tmp/backup-output"))
+
+        mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
+        self.assertTrue(str(result).startswith("/tmp/backup-output/"))
+        self.assertIn("mysql-k8s-backup-metadata-", str(result))
+        mock_write_text.assert_called_once()
 
 
 class TestEtcdBackup(unittest.TestCase):

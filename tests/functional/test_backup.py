@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Limited
+# Copyright 2026 Canonical Limited
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,274 +16,204 @@
 
 import glob
 import json
-import os
 import subprocess
 from pathlib import Path
 
+import jubilant
 import pytest
+from pytest_jubilant import JujuFactory
 
-from jujubackupall.utils import parse_charm_name
+from jujubackupall import constants
+from tests.functional.conftest import K8S_CLOUD, expose_via_loadbalancer, resolve_controller_name
 
-WAIT_TIMEOUT = 20 * 60
-K8S_HOST_MODEL = "juju-backup-all-k8s-host-model"
-K8S_CLOUD = "juju-backup-all-k8s-cloud"
-MYSQLK8S_MODEL = "juju-backup-all-mysql-k8s-model"
-MINIO_MODEL = "juju-backup-all-minio-model"
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin123"
-S3_INTEGRATOR_CONFIG_ENVIRONMENT_VARIABLES = (
-    "S3_INTEGRATOR_ENDPOINT",
-    "S3_INTEGRATOR_BUCKET",
-    "S3_INTEGRATOR_PATH",
-    "S3_INTEGRATOR_ACCESS_KEY",
-    "S3_INTEGRATOR_SECRET_KEY",
-)
+WAIT_TIMEOUT = 30 * 60  # 30 minutes
+K8S_WAIT_TIMEOUT = 10 * 60  # 10 minutes
+MINIO_ACCESS_KEY = "ahs9ao#Fua"
+MINIO_SECRET_KEY = "ohCa!uB6oo"
 
 
-def run_command(command: str) -> str:
-    return subprocess.check_output(command, shell=True, text=True)
+def get_supported_backup_charms_but(app):
+    """Return the list of charms that support backup except the one provided."""
+    if app not in constants.SUPPORTED_BACKUP_CHARMS and app != "":
+        raise ValueError(f"{app} is not a supported backup charm.")
+    return filter(lambda charm: charm != app, constants.SUPPORTED_BACKUP_CHARMS)
 
 
-def run_juju(*args: str, input: str | None = None) -> str:
-    return subprocess.run(
-        ["juju", *args], check=True, input=input, text=True, capture_output=True
-    ).stdout
-
-
-def configure_minio_for_mysql_backups():
-    run_command(f'juju add-model "{MYSQLK8S_MODEL}" "{K8S_CLOUD}"')
-    if get_s3_integrator_config():
-        os.environ.setdefault("K8S_CLOUD_NAME", K8S_CLOUD)
-        os.environ.setdefault("MYSQLK8S_MODEL_NAME", MYSQLK8S_MODEL)
-        os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_BUCKET", f"{MINIO_MODEL}-mysql-k8s")
-        os.environ.setdefault("S3_INTEGRATOR_MYSQLK8S_PATH", f"/{MINIO_MODEL}/mysql-k8s")
-        return
-
-    run_command(f'juju add-model "{MINIO_MODEL}" "{K8S_CLOUD}"')
-    run_command(
-        f'juju deploy minio -m "{MINIO_MODEL}" '
-        "--channel=ckf-1.10/stable "
-        "--trust "
-        f'--config="access-key={MINIO_ACCESS_KEY}" '
-        f'--config="secret-key={MINIO_SECRET_KEY}"'
-    )
-    run_command(
-        f'juju wait-for application -m "{MINIO_MODEL}" minio '
-        '--query=\'name=="minio" && (status=="active" || status=="idle")\' '
-        "--timeout=20m"
-    )
-
-    k8s_status = json.loads(run_command(f'juju status -m "{K8S_HOST_MODEL}" --format=json'))
-    load_balancer_cidrs = " ".join(
-        f"{machine['ip-addresses'][0]}/32"
-        for machine in k8s_status.get("machines", {}).values()
-        if machine.get("ip-addresses")
-    )
-    run_command(
-        f'juju config k8s -m "{K8S_HOST_MODEL}" '
-        "load-balancer-enabled=true local-storage-enabled=true "
-        f'load-balancer-cidrs="{load_balancer_cidrs}"'
-    )
-
-    minio_service_manifest = (
-        "apiVersion: v1\n"
-        "kind: Service\n"
-        "metadata:\n"
-        "  name: minio\n"
-        f"  namespace: {MINIO_MODEL}\n"
-        "spec:\n"
-        "  type: LoadBalancer\n"
-        "  selector:\n"
-        "    app.kubernetes.io/name: minio\n"
-        "  ports:\n"
-        "    - name: minio\n"
-        "      port: 9000\n"
-        "      targetPort: 9000\n"
-    )
-
-    run_juju(
-        "ssh",
-        "-m",
-        K8S_HOST_MODEL,
-        "k8s/0",
-        "--",
-        "sudo",
+@pytest.mark.juju_setup
+def test_deploy_k8s_cloud(k8s_host_juju: jubilant.Juju, request: pytest.FixtureRequest):
+    """Deploy and configure the k8s charm, and register it as a Juju cloud."""
+    k8s_host_juju.deploy(
         "k8s",
-        "kubectl",
-        "-n",
-        MINIO_MODEL,
-        "apply",
-        "-f",
-        "-",
-        input=minio_service_manifest,
+        channel="1.32/stable",
+        base="ubuntu@24.04",
+        constraints={
+            "cores": "4",
+            "mem": "16G",
+            "root-disk": "100G",
+            "virt-type": "virtual-machine",
+        },
+        config={
+            "load-balancer-enabled": True,
+            "local-storage-enabled": True,
+        },
     )
+    k8s_host_juju.wait(lambda status: jubilant.all_active(status, "k8s"), timeout=K8S_WAIT_TIMEOUT)
 
-    run_command(
-        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- sudo k8s kubectl wait '
-        f"--for=jsonpath='{{.status.loadBalancer.ingress[0].ip}}' "
-        f'service/minio -n "{MINIO_MODEL}" --timeout=5m'
-    )
+    k8s_unit_ip = k8s_host_juju.status().apps["k8s"].units["k8s/0"].public_address
+    k8s_host_juju.config("k8s", {"load-balancer-cidrs": f"{k8s_unit_ip}/32"})
 
-    load_balancer_ip = run_command(
-        f'juju ssh -m "{K8S_HOST_MODEL}" k8s/0 -- '
-        f'"sudo k8s kubectl -n {MINIO_MODEL} get service minio '
-        "-o jsonpath='{.status.loadBalancer.ingress[0].ip}'\""
-    ).strip()
+    kubeconfig = k8s_host_juju.ssh("k8s/0", "sudo k8s config")
+    controller_name = resolve_controller_name(request)
 
-    os.environ.update(
-        {
-            "S3_INTEGRATOR_ENDPOINT": f"http://{load_balancer_ip}:9000",
-            "S3_INTEGRATOR_ACCESS_KEY": MINIO_ACCESS_KEY,
-            "S3_INTEGRATOR_SECRET_KEY": MINIO_SECRET_KEY,
-            "S3_INTEGRATOR_BUCKET": f"{MINIO_MODEL}-mysql",
-            "S3_INTEGRATOR_PATH": f"/{MINIO_MODEL}/mysql",
-            "S3_INTEGRATOR_MYSQLK8S_BUCKET": f"{MINIO_MODEL}-mysql-k8s",
-            "S3_INTEGRATOR_MYSQLK8S_PATH": f"/{MINIO_MODEL}/mysql-k8s",
-            "K8S_CLOUD_NAME": K8S_CLOUD,
-            "MYSQLK8S_MODEL_NAME": MYSQLK8S_MODEL,
-        }
+    jubilant.Juju().cli(
+        "add-k8s",
+        K8S_CLOUD,
+        "--controller",
+        controller_name,
+        include_model=False,
+        stdin=kubeconfig,
     )
 
 
-def get_s3_integrator_config():
-    missing_variables = [
-        variable
-        for variable in S3_INTEGRATOR_CONFIG_ENVIRONMENT_VARIABLES
-        if not os.environ.get(variable)
-    ]
-    if missing_variables:
-        return None
-    return {
-        "endpoint": os.environ["S3_INTEGRATOR_ENDPOINT"],
-        "bucket": os.environ["S3_INTEGRATOR_BUCKET"],
-        "path": os.environ["S3_INTEGRATOR_PATH"],
-        "region": "us-east-1",
-        "s3-uri-style": "path",
-    }
-
-
-def get_mysqlk8s_s3_integrator_config():
-    # mysql-k8s lives in its own k8s model/cluster, it gets a dedicated bucket
-    # on the same MinIO endpoint used by the machine mysql operator test.
-    base_config = get_s3_integrator_config()
-    if not base_config or not all(
-        os.environ.get(variable)
-        for variable in (
-            "S3_INTEGRATOR_MYSQLK8S_BUCKET",
-            "S3_INTEGRATOR_MYSQLK8S_PATH",
-        )
-    ):
-        return None
-    return {
-        **base_config,
-        "bucket": os.environ["S3_INTEGRATOR_MYSQLK8S_BUCKET"],
-        "path": os.environ["S3_INTEGRATOR_MYSQLK8S_PATH"],
-    }
-
-
-@pytest.mark.abort_on_fail
-@pytest.mark.skip_if_deployed
-async def test_build_and_deploy(ops_test):
+@pytest.mark.juju_setup
+def test_build_and_deploy(
+    juju_lxd: jubilant.Juju, juju_k8s: jubilant.Juju, k8s_host_juju: jubilant.Juju
+):
     """Deploy all applications."""
-    configure_minio_for_mysql_backups()
+    # --- Minio S3 storage ---
 
-    await ops_test.model.deploy(
-        "ch:mysql-innodb-cluster",
-        application_name="mysqlinnodb",
-        series="jammy",
+    minio_credentials = {"access-key": MINIO_ACCESS_KEY, "secret-key": MINIO_SECRET_KEY}
+
+    juju_k8s.deploy(
+        "minio",
+        channel="ckf-1.10/stable",
+        trust=True,
+        config=minio_credentials,
+    )
+
+    # --- Database Applications ---
+
+    # Mysql InnoDB Cluster
+    juju_lxd.deploy(
+        "mysql-innodb-cluster",
+        app="mysql-innodb",
+        base="ubuntu@22.04",
         channel="8.0/stable",
         num_units=3,
     )
-    s3_integrator_config = get_s3_integrator_config()
-    if s3_integrator_config:
-        await ops_test.model.deploy(
-            "ch:mysql",
-            application_name="mysql",
-            series="jammy",
-            channel="8.0/stable",
-            num_units=3,
-        )
-        s3_integrator = await ops_test.model.deploy("ch:s3-integrator", channel="2/stable")
-        await ops_test.model.wait_for_idle(
-            apps=["s3-integrator"], timeout=WAIT_TIMEOUT, check_freq=3
-        )
-        secret_id = run_juju(
-            "add-secret",
-            "mysql-s3-credentials",
-            f"access-key={os.environ['S3_INTEGRATOR_ACCESS_KEY']}",
-            f"secret-key={os.environ['S3_INTEGRATOR_SECRET_KEY']}",
-            "-m",
-            ops_test.model.name,
-        ).strip()
-        run_juju("grant-secret", secret_id, "s3-integrator", "-m", ops_test.model.name)
-        await s3_integrator.set_config({**s3_integrator_config, "credentials": secret_id})
-        await ops_test.model.wait_for_idle(
-            apps=["mysql"], timeout=WAIT_TIMEOUT, status="active", check_freq=3
-        )
-        await ops_test.model.integrate("mysql:s3-parameters", "s3-integrator:s3-credentials")
-    await ops_test.model.deploy(
-        "ch:postgresql",
-        application_name="postgresql",
-        series="jammy",
+
+    # PostgreSQL
+    juju_lxd.deploy(
+        "postgresql",
+        app="postgresql",
+        base="ubuntu@22.04",
         channel="14/stable",
         num_units=1,
     )
-    await ops_test.model.deploy(
-        "ch:etcd", application_name="etcd", series="jammy", channel="stable", num_units=1
-    )
-    await ops_test.model.deploy(
-        "ch:easyrsa", application_name="easyrsa", series="jammy", channel="stable", num_units=1
-    )
-    await ops_test.model.integrate("etcd:certificates", "easyrsa:client")
 
-    await ops_test.model.wait_for_idle(timeout=WAIT_TIMEOUT, status="active", check_freq=3)
+    # MySQL
+    juju_lxd.deploy(
+        "mysql",
+        app="mysql",
+        base="ubuntu@22.04",
+        channel="8.0/stable",
+        num_units=3,
+    )
 
-    mysqlk8s_s3_integrator_config = get_mysqlk8s_s3_integrator_config()
-    if mysqlk8s_s3_integrator_config and os.environ.get("MYSQLK8S_MODEL_NAME"):
-        k8s_model = await ops_test.track_model(
-            "mysqlk8s",
-            model_name=os.environ["MYSQLK8S_MODEL_NAME"],
-            cloud_name=os.environ.get("K8S_CLOUD_NAME"),
-            use_existing=True,
-            keep=True,
+    # MySQL K8s
+    juju_k8s.deploy(
+        "mysql-k8s",
+        app="mysql-k8s",
+        base="ubuntu@22.04",
+        channel="8.0/stable",
+        trust=True,
+        num_units=3,
+    )
+
+    # ZooKeeper
+    juju_lxd.deploy(
+        "zookeeper",
+        app="zookeeper",
+        base="ubuntu@22.04",
+        channel="3/stable",
+        num_units=3,
+    )
+
+    # ZooKeeper K8s
+    juju_k8s.deploy(
+        "zookeeper-k8s",
+        app="zookeeper-k8s",
+        base="ubuntu@22.04",
+        channel="3/stable",
+        num_units=3,
+    )
+
+    # Etcd and EasyRSA for TLS certificates
+    juju_lxd.deploy(
+        "etcd",
+        app="etcd",
+        base="ubuntu@22.04",
+        channel="stable",
+        num_units=1,
+    )
+    juju_lxd.deploy(
+        "easyrsa",
+        app="easyrsa",
+        base="ubuntu@22.04",
+        channel="stable",
+        num_units=1,
+    )
+    juju_lxd.integrate("etcd:certificates", "easyrsa:client")
+
+    # --- Deploy s3-integrators and configure s3-credentials for charms ---
+
+    juju_k8s.wait(lambda status: jubilant.all_active(status, "minio"), timeout=WAIT_TIMEOUT)
+
+    minio_ip = expose_via_loadbalancer(k8s_host_juju, juju_k8s, "minio")
+    s3_secret = juju_lxd.add_secret("s3-credentials", minio_credentials)
+    s3_secret_k8s = juju_k8s.add_secret("s3-credentials", minio_credentials)
+    for juju, secret, app in [
+        (juju_lxd, s3_secret, "mysql"),
+        (juju_lxd, s3_secret, "zookeeper"),
+        (juju_k8s, s3_secret_k8s, "mysql-k8s"),
+        (juju_k8s, s3_secret_k8s, "zookeeper-k8s"),
+    ]:
+        juju.deploy(
+            "s3-integrator",
+            app=f"s3-integrator-{app}",
+            channel="2/stable",
+            config={
+                "endpoint": f"http://{minio_ip}:9000",
+                "bucket": f"{app}-backups",
+                "region": "us-east-1",
+                "s3-uri-style": "path",
+            },
         )
-        await k8s_model.deploy(
-            "ch:mysql-k8s",
-            application_name="mysql-k8s",
-            channel="8.0/stable",
-            config={"profile": "testing"},
-            trust=True,
-            num_units=3,
-        )
-        k8s_s3_integrator = await k8s_model.deploy(
-            "ch:s3-integrator", channel="2/stable", trust=True
-        )
-        await k8s_model.wait_for_idle(apps=["s3-integrator"], timeout=WAIT_TIMEOUT, check_freq=3)
-        k8s_secret_id = run_juju(
-            "add-secret",
-            "mysql-k8s-s3-credentials",
-            f"access-key={os.environ['S3_INTEGRATOR_ACCESS_KEY']}",
-            f"secret-key={os.environ['S3_INTEGRATOR_SECRET_KEY']}",
-            "-m",
-            k8s_model.name,
-        ).strip()
-        run_juju("grant-secret", k8s_secret_id, "s3-integrator", "-m", k8s_model.name)
-        await k8s_s3_integrator.set_config(
-            {**mysqlk8s_s3_integrator_config, "credentials": k8s_secret_id}
-        )
-        await k8s_model.integrate("mysql-k8s", "s3-integrator")
-        await k8s_model.wait_for_idle(timeout=WAIT_TIMEOUT, status="active", check_freq=3)
+        juju.integrate(app, f"s3-integrator-{app}")
+        juju.grant_secret("s3-credentials", f"s3-integrator-{app}")
+        juju.config(f"s3-integrator-{app}", {"credentials": secret})
+
+    # --- Wait all to be ready ---
+
+    juju_lxd.wait(jubilant.all_active, timeout=WAIT_TIMEOUT)
+    juju_k8s.wait(jubilant.all_active, timeout=WAIT_TIMEOUT)
+
+
+def _model_and_controller(juju: jubilant.Juju):
+    model_status = juju.status().model
+    return model_status.name, model_status.controller
 
 
 @pytest.mark.parametrize("backup_location", ["/var/backups/mysql", "/home/ubuntu/abc"])
-def test_mysql_innodb_backup(backup_location, ops_test, tmp_path: Path):
-    mysql_innodb_app_name = "mysqlinnodb"
-    model_name = ops_test.model.name
-    controller_name = ops_test.controller_name
-    mysql_innodb_app = ops_test.model.applications.get(mysql_innodb_app_name)
+def test_mysql_innodb_backup(backup_location, juju_lxd: jubilant.Juju, tmp_path: Path):
+    mysql_innodb_app_name = "mysql-innodb"
+    model_name, controller_name = _model_and_controller(juju_lxd)
+    mysql_innodb_app = juju_lxd.status().apps[mysql_innodb_app_name]
 
+    exclude_opts = " -e ".join(get_supported_backup_charms_but("mysql-innodb-cluster"))
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e etcd -e mysql -e mysql-k8s -e postgresql -x -j --backup-location-on-mysql {backup_location}",
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j "
+        f"--backup-location-on-mysql {backup_location}",
         shell=True,
     )
     output_dict = json.loads(output)
@@ -292,24 +222,20 @@ def test_mysql_innodb_backup(backup_location, ops_test, tmp_path: Path):
     assert any(str(tmp_path) in x.get("download_path") for x in output_dict.get("app_backups"))
     assert app_backup_entry.get("controller") == controller_name
     assert any(x.get("model") == model_name for x in output_dict.get("app_backups"))
-    assert app_backup_entry.get("charm") in mysql_innodb_app.data.get("charm-url")
+    assert app_backup_entry.get("charm") in mysql_innodb_app.charm
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + "/mysqldump-all-databases*.gz")
 
 
-def test_mysql_operator_backup(ops_test, tmp_path: Path):
-    if not get_s3_integrator_config():
-        pytest.skip("requires S3_INTEGRATOR_* environment variables")
+def test_mysql_operator_backup(juju_lxd: jubilant.Juju, tmp_path: Path):
     mysql_app_name = "mysql"
-    model_name = ops_test.model.name
-    controller_name = ops_test.controller_name
-    mysql_app = ops_test.model.applications.get(mysql_app_name)
-    charm_name = parse_charm_name(mysql_app.data.get("charm-url"))
-    if charm_name != "mysql":
-        pytest.skip("requires a configured ch:mysql application")
+    model_name, controller_name = _model_and_controller(juju_lxd)
+    status = juju_lxd.status()
+    mysql_app = status.apps.get(mysql_app_name)
 
+    exclude_opts = " -e ".join(get_supported_backup_charms_but("mysql"))
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e etcd -e mysql-innodb-cluster -e mysql-k8s -e postgresql -x -j",
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j ",
         shell=True,
     )
     output_dict = json.loads(output)
@@ -320,30 +246,23 @@ def test_mysql_operator_backup(ops_test, tmp_path: Path):
     assert str(tmp_path) in app_backup_entry.get("download_path")
     assert app_backup_entry.get("controller") == controller_name
     assert app_backup_entry.get("model") == model_name
-    assert app_backup_entry.get("charm") in mysql_app.data.get("charm-url")
+    assert app_backup_entry.get("charm") in mysql_app.charm
     assert expected_output_dir.exists()
 
-    metadata_files = list(expected_output_dir.glob("mysql-backup-metadata-*.json"))
+    metadata_files = list(expected_output_dir.glob(f"{mysql_app_name}-backup-metadata-*.txt"))
     assert len(metadata_files) == 1
-    metadata = json.loads(metadata_files[0].read_text())
-    assert metadata.get("backup-id")
-    assert metadata.get("return-code") == 0
+    assert metadata_files[0].read_text() != ""
 
 
-def test_mysql_operator_k8s_backup(ops_test, tmp_path: Path):
-    if not get_mysqlk8s_s3_integrator_config() or "mysqlk8s" not in ops_test.models:
-        pytest.skip("requires a deployed mysql-k8s application with S3 integration")
+def test_mysql_k8s_operator_backup(juju_k8s: jubilant.Juju, tmp_path: Path):
     mysql_k8s_app_name = "mysql-k8s"
-    k8s_model = ops_test.models["mysqlk8s"].model
-    model_name = k8s_model.name
-    controller_name = ops_test.controller_name
-    mysql_k8s_app = k8s_model.applications.get(mysql_k8s_app_name)
-    charm_name = parse_charm_name(mysql_k8s_app.data.get("charm-url"))
-    if charm_name != "mysql-k8s":
-        pytest.skip("requires a configured ch:mysql-k8s application")
+    model_name, controller_name = _model_and_controller(juju_k8s)
+    status = juju_k8s.status()
+    mysql_k8s_app = status.apps.get(mysql_k8s_app_name)
 
+    exclude_opts = " -e ".join(get_supported_backup_charms_but("mysql-k8s"))
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e etcd -e mysql -e mysql-innodb-cluster -e postgresql -x -j",
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j ",
         shell=True,
     )
     output_dict = json.loads(output)
@@ -354,25 +273,78 @@ def test_mysql_operator_k8s_backup(ops_test, tmp_path: Path):
     assert str(tmp_path) in app_backup_entry.get("download_path")
     assert app_backup_entry.get("controller") == controller_name
     assert app_backup_entry.get("model") == model_name
-    assert app_backup_entry.get("charm") in mysql_k8s_app.data.get("charm-url")
+    assert app_backup_entry.get("charm") in mysql_k8s_app.charm
     assert expected_output_dir.exists()
 
-    metadata_files = list(expected_output_dir.glob("mysql-backup-metadata-*.json"))
+    metadata_files = list(expected_output_dir.glob(f"{mysql_k8s_app_name}-backup-metadata-*.txt"))
     assert len(metadata_files) == 1
-    metadata = json.loads(metadata_files[0].read_text())
-    assert metadata.get("backup-id")
-    assert metadata.get("return-code") == 0
+    assert metadata_files[0].read_text() != ""
+
+
+def test_zookeeper_operator_backup(juju_lxd: jubilant.Juju, tmp_path: Path):
+    zookeeper_app_name = "zookeeper"
+    model_name, controller_name = _model_and_controller(juju_lxd)
+    status = juju_lxd.status()
+    zookeeper_app = status.apps.get(zookeeper_app_name)
+
+    exclude_opts = " -e ".join(get_supported_backup_charms_but("zookeeper"))
+    output = subprocess.check_output(
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j ",
+        shell=True,
+    )
+    output_dict = json.loads(output)
+    expected_output_dir = tmp_path / controller_name / model_name / zookeeper_app_name
+    app_backup_entries = output_dict.get("app_backups")
+    assert len(app_backup_entries) == 1
+    app_backup_entry = app_backup_entries[0]
+    assert str(tmp_path) in app_backup_entry.get("download_path")
+    assert app_backup_entry.get("controller") == controller_name
+    assert app_backup_entry.get("model") == model_name
+    assert app_backup_entry.get("charm") in zookeeper_app.charm
+    assert expected_output_dir.exists()
+
+    metadata_files = list(expected_output_dir.glob(f"{zookeeper_app_name}-backup-metadata-*.txt"))
+    assert len(metadata_files) == 1
+    assert metadata_files[0].read_text() != ""
+
+
+def test_zookeeper_k8s_operator_backup(juju_k8s: jubilant.Juju, tmp_path: Path):
+    zookeeper_app_name = "zookeeper-k8s"
+    model_name, controller_name = _model_and_controller(juju_k8s)
+    status = juju_k8s.status()
+    zookeeper_app = status.apps.get(zookeeper_app_name)
+
+    exclude_opts = " -e ".join(get_supported_backup_charms_but("zookeeper-k8s"))
+    output = subprocess.check_output(
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j ",
+        shell=True,
+    )
+    output_dict = json.loads(output)
+    expected_output_dir = tmp_path / controller_name / model_name / zookeeper_app_name
+    app_backup_entries = output_dict.get("app_backups")
+    assert len(app_backup_entries) == 1
+    app_backup_entry = app_backup_entries[0]
+    assert str(tmp_path) in app_backup_entry.get("download_path")
+    assert app_backup_entry.get("controller") == controller_name
+    assert app_backup_entry.get("model") == model_name
+    assert app_backup_entry.get("charm") in zookeeper_app.charm
+    assert expected_output_dir.exists()
+
+    metadata_files = list(expected_output_dir.glob(f"{zookeeper_app_name}-backup-metadata-*.txt"))
+    assert len(metadata_files) == 1
+    assert metadata_files[0].read_text() != ""
 
 
 @pytest.mark.parametrize("backup_location", ["/home/ubuntu", "/home/ubuntu/abc"])
-def test_postgresql_backup(backup_location, ops_test, tmp_path: Path):
+def test_postgresql_backup(backup_location, juju_lxd: jubilant.Juju, tmp_path: Path):
     postgresql_app_name = "postgresql"
-    model_name = ops_test.model.name
-    controller_name = ops_test.controller_name
-    postgresql_app = ops_test.model.applications.get(postgresql_app_name)
+    model_name, controller_name = _model_and_controller(juju_lxd)
+    postgresql_app = juju_lxd.status().apps[postgresql_app_name]
 
+    exclude_opts = " -e ".join(get_supported_backup_charms_but("postgresql"))
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e etcd -e mysql -e mysql-innodb-cluster -e mysql-k8s -x -j --backup-location-on-postgresql {backup_location}",
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j "
+        f"--backup-location-on-postgresql {backup_location}",
         shell=True,
     )
     output_dict = json.loads(output)
@@ -381,19 +353,21 @@ def test_postgresql_backup(backup_location, ops_test, tmp_path: Path):
     assert any(str(tmp_path) in x.get("download_path") for x in output_dict.get("app_backups"))
     assert app_backup_entry.get("controller") == controller_name
     assert any(x.get("model") == model_name for x in output_dict.get("app_backups"))
-    assert app_backup_entry.get("charm") in postgresql_app.data.get("charm-url")
+    assert app_backup_entry.get("charm") in postgresql_app.charm
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + "/pgdump-all-databases*.gz")
 
 
 @pytest.mark.parametrize("backup_location", ["/home/ubuntu/etcd-snapshots", "/home/ubuntu/abc"])
-def test_etcd_backup(backup_location, ops_test, tmp_path: Path):
+def test_etcd_backup(backup_location, juju_lxd: jubilant.Juju, tmp_path: Path):
     etcd_app_name = "etcd"
-    model_name = ops_test.model.name
-    controller_name = ops_test.controller_name
-    etcd_app = ops_test.model.applications.get(etcd_app_name)
+    model_name, controller_name = _model_and_controller(juju_lxd)
+    etcd_app = juju_lxd.status().apps[etcd_app_name]
+
+    exclude_opts = " -e ".join(get_supported_backup_charms_but("etcd"))
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e mysql -e mysql-innodb-cluster -e mysql-k8s -e postgresql -x -j --backup-location-on-etcd {backup_location}",
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j "
+        f"--backup-location-on-etcd {backup_location}",
         shell=True,
     )
     output_dict = json.loads(output)
@@ -402,15 +376,17 @@ def test_etcd_backup(backup_location, ops_test, tmp_path: Path):
     assert any(str(tmp_path) in x.get("download_path") for x in output_dict.get("app_backups"))
     assert app_backup_entry.get("controller") == controller_name
     assert any(x.get("model") == model_name for x in output_dict.get("app_backups"))
-    assert app_backup_entry.get("charm") in etcd_app.data.get("charm-url")
+    assert app_backup_entry.get("charm") in etcd_app.charm
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + "/etcd-snapshot*.gz")
 
 
-def test_juju_controller_backup(ops_test, tmp_path: Path):
-    controller_name = ops_test.controller_name
+def test_juju_controller_backup(juju_lxd: jubilant.Juju, tmp_path: Path):
+    _, controller_name = _model_and_controller(juju_lxd)
+
+    exclude_opts = " -e ".join(get_supported_backup_charms_but(""))  # all charms are excluded
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e etcd -e mysql -e mysql-innodb-cluster -e mysql-k8s -e postgresql -j",
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -j ",
         shell=True,
     )
     output_dict = json.loads(output)
@@ -423,8 +399,9 @@ def test_juju_controller_backup(ops_test, tmp_path: Path):
 
 
 def test_juju_client_config_backup(tmp_path: Path):
+    exclude_opts = " -e ".join(get_supported_backup_charms_but(""))  # all charms are excluded
     output = subprocess.check_output(
-        f"juju-backup-all -o {tmp_path} -e etcd -e mysql -e mysql-innodb-cluster -e mysql-k8s -e postgresql -x",
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x ",
         shell=True,
     )
     output_dict = json.loads(output)
@@ -434,3 +411,34 @@ def test_juju_client_config_backup(tmp_path: Path):
     assert config_backup_entry.get("config") == "juju"
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + "/juju-*.gz")
+
+
+@pytest.mark.juju_teardown
+def test_remove_k8s_cloud(
+    juju_factory: JujuFactory,
+    juju_k8s: jubilant.Juju,
+    request: pytest.FixtureRequest,
+):
+    """Destroy the k8s model, then unregister the k8s cloud created for this test session.
+
+    The k8s model must be destroyed before the cloud is unregistered, since the cloud
+    can't be removed while a model is still deployed on it. We destroy it explicitly here
+    (rather than relying on juju_factory's own teardown, which only runs after this test
+    completes) and drop it from juju_factory's tracked models so its teardown doesn't try
+    to destroy it a second time, which would raise and abort destruction of the remaining
+    models (juju_lxd, k8s_host_juju).
+    """
+    model_name = juju_k8s.model
+    assert model_name is not None
+    juju_k8s.destroy_model(model_name, destroy_storage=True, force=True)
+
+    # Reach into juju_factory's private state to prevent it from re-destroying this model.
+    juju_factory._models.pop(model_name, None)  # pyright: ignore[reportPrivateUsage]
+
+    controller_name = resolve_controller_name(request)
+    try:
+        jubilant.Juju().cli(
+            "remove-k8s", K8S_CLOUD, "--controller", controller_name, include_model=False
+        )
+    except jubilant.CLIError as e:
+        raise RuntimeError(f"Failed to remove k8s cloud: {e.stderr}") from e

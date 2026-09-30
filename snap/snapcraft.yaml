@@ -16,6 +16,8 @@ description: |
   * mysql-innodb-cluster
   * mysql
   * mysql-k8s
+  * zookeeper
+  * zookeeper-k8s
 
   Supported juju backups:
   * Juju configs
@@ -81,7 +83,7 @@ parts:
     plugin: python
     source: .
     source-type: git
-    build-packages: # required for finding version
+    build-packages:  # required for finding version
       - python3-setuptools-scm
     stage-packages:
       - libpython3-stdlib
