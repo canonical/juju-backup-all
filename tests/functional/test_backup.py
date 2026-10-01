@@ -27,6 +27,7 @@ from jujubackupall import constants
 from tests.functional.conftest import K8S_CLOUD, expose_via_loadbalancer, resolve_controller_name
 
 WAIT_TIMEOUT = 30 * 60  # 30 minutes
+LONG_WAIT_TIMEOUT = 60 * 60  # 60 minutes
 K8S_WAIT_TIMEOUT = 10 * 60  # 10 minutes
 MINIO_ACCESS_KEY = "ahs9ao#Fua"
 MINIO_SECRET_KEY = "ohCa!uB6oo"
@@ -188,18 +189,16 @@ def test_build_and_deploy(
         (juju_k8s, s3_secret_k8s, "mysql-k8s"),
         (juju_k8s, s3_secret_k8s, "zookeeper-k8s"),
     ]:
-        s3_config = {
-            "endpoint": f"http://{minio_ip}:9000",
-            "bucket": f"{app}-backups",
-            "region": "us-east-1",
-            "s3-uri-style": "path",
-            "path": app,
-        }
         juju.deploy(
             "s3-integrator",
             app=f"s3-integrator-{app}",
             channel="2/stable",
-            config=s3_config,
+            config={
+                "endpoint": f"http://{minio_ip}:9000",
+                "bucket": f"{app}-backups",
+                "region": "us-east-1",
+                "s3-uri-style": "path",
+            },
         )
         juju.integrate(app, f"s3-integrator-{app}")
         juju.grant_secret("s3-credentials", f"s3-integrator-{app}")
@@ -207,8 +206,8 @@ def test_build_and_deploy(
 
     # --- Wait all to be ready ---
 
-    juju_lxd.wait(jubilant.all_active, timeout=WAIT_TIMEOUT)
-    juju_k8s.wait(jubilant.all_active, timeout=WAIT_TIMEOUT)
+    juju_lxd.wait(jubilant.all_active, timeout=LONG_WAIT_TIMEOUT)
+    juju_k8s.wait(jubilant.all_active, timeout=LONG_WAIT_TIMEOUT)
 
 
 def _model_and_controller(juju: jubilant.Juju):
