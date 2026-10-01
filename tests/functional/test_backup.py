@@ -27,6 +27,7 @@ from jujubackupall import constants
 from tests.functional.conftest import K8S_CLOUD, expose_via_loadbalancer, resolve_controller_name
 
 WAIT_TIMEOUT = 30 * 60  # 30 minutes
+LONG_WAIT_TIMEOUT = 60 * 60  # 60 minutes
 K8S_WAIT_TIMEOUT = 10 * 60  # 10 minutes
 MINIO_ACCESS_KEY = "ahs9ao#Fua"
 MINIO_SECRET_KEY = "ohCa!uB6oo"
@@ -120,6 +121,15 @@ def test_build_and_deploy(
         num_units=3,
     )
 
+    # MongoDB
+    juju_lxd.deploy(
+        "mongodb",
+        app="mongodb",
+        base="ubuntu@24.04",
+        channel="8/stable",
+        num_units=3,
+    )
+
     # MySQL K8s
     juju_k8s.deploy(
         "mysql-k8s",
@@ -174,6 +184,7 @@ def test_build_and_deploy(
     s3_secret_k8s = juju_k8s.add_secret("s3-credentials", minio_credentials)
     for juju, secret, app in [
         (juju_lxd, s3_secret, "mysql"),
+        (juju_lxd, s3_secret, "mongodb"),
         (juju_lxd, s3_secret, "zookeeper"),
         (juju_k8s, s3_secret_k8s, "mysql-k8s"),
         (juju_k8s, s3_secret_k8s, "zookeeper-k8s"),
@@ -195,8 +206,8 @@ def test_build_and_deploy(
 
     # --- Wait all to be ready ---
 
-    juju_lxd.wait(jubilant.all_active, timeout=WAIT_TIMEOUT)
-    juju_k8s.wait(jubilant.all_active, timeout=WAIT_TIMEOUT)
+    juju_lxd.wait(jubilant.all_active, timeout=LONG_WAIT_TIMEOUT)
+    juju_k8s.wait(jubilant.all_active, timeout=LONG_WAIT_TIMEOUT)
 
 
 def _model_and_controller(juju: jubilant.Juju):
@@ -250,6 +261,33 @@ def test_mysql_operator_backup(juju_lxd: jubilant.Juju, tmp_path: Path):
     assert expected_output_dir.exists()
 
     metadata_files = list(expected_output_dir.glob(f"{mysql_app_name}-backup-metadata-*.txt"))
+    assert len(metadata_files) == 1
+    assert metadata_files[0].read_text() != ""
+
+
+def test_mongodb_operator_backup(juju_lxd: jubilant.Juju, tmp_path: Path):
+    mongodb_app_name = "mongodb"
+    model_name, controller_name = _model_and_controller(juju_lxd)
+    status = juju_lxd.status()
+    mongodb_app = status.apps.get(mongodb_app_name)
+
+    exclude_opts = " -e ".join(get_supported_backup_charms_but(mongodb_app_name))
+    output = subprocess.check_output(
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j ",
+        shell=True,
+    )
+    output_dict = json.loads(output)
+    expected_output_dir = tmp_path / controller_name / model_name / mongodb_app_name
+    app_backup_entries = output_dict.get("app_backups")
+    assert len(app_backup_entries) == 1
+    app_backup_entry = app_backup_entries[0]
+    assert str(tmp_path) in app_backup_entry.get("download_path")
+    assert app_backup_entry.get("controller") == controller_name
+    assert app_backup_entry.get("model") == model_name
+    assert app_backup_entry.get("charm") in mongodb_app.charm
+    assert expected_output_dir.exists()
+
+    metadata_files = list(expected_output_dir.glob(f"{mongodb_app_name}-backup-metadata-*.txt"))
     assert len(metadata_files) == 1
     assert metadata_files[0].read_text() != ""
 

@@ -39,6 +39,7 @@ from jujubackupall.utils import (
     ensure_path_exists,
     get_datetime_string,
     get_leader,
+    get_mongodb_primary,
     get_non_primary,
     scp_from_unit,
     ssh_run_on_unit,
@@ -180,6 +181,23 @@ class MysqlOperatorBackup(MysqlBackup):
     """Back up the MySQL Operator charm through its S3-backed backup action."""
 
     charm_name = "mysql"
+
+
+class MongodbOperatorBackup(S3Backup):
+    """Back up the MongoDB Operator charm through its S3-backed create-backup action."""
+
+    charm_name = "mongodb"
+
+    def backup(self):
+        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
+        backup_status = action_output.get("backup-status")
+        if not isinstance(backup_status, str):
+            raise BackupMetadataError("create-backup did not return a backup id")
+        _, marker, backup_id = backup_status.partition("backup id:")
+        backup_id = backup_id.strip()
+        if not marker or not backup_id:
+            raise BackupMetadataError("create-backup did not return a backup id")
+        self.backup_id = backup_id.split(maxsplit=1)[0]
 
 
 class MysqlK8sOperatorBackup(MysqlBackup):
@@ -447,6 +465,8 @@ def get_charm_backup_instance(
         # The charm refuses to back up using the cluster primary.
         # Note that the primary is not necessarily the leader.
         unit = get_non_primary(units, timeout)
+    elif charm_name == MongodbOperatorBackup.charm_name:
+        unit = get_mongodb_primary(units, timeout)
     else:
         unit = get_leader(units)
     if charm_name == MysqlInnodbBackup.charm_name:
@@ -461,6 +481,8 @@ def get_charm_backup_instance(
         return MysqlK8sOperatorBackup(
             unit=unit, backup_basedir=backup_location_on_mysql, timeout=timeout
         )
+    if charm_name == MongodbOperatorBackup.charm_name:
+        return MongodbOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
     if charm_name == EtcdBackup.charm_name:
         return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd, timeout=timeout)
     if charm_name == PostgresqlBackup.charm_name:
