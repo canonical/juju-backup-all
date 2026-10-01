@@ -12,6 +12,7 @@ from jujubackupall.backup import (
     EtcdBackup,
     JujuClientConfigBackup,
     JujuControllerBackup,
+    MongodbK8sOperatorBackup,
     MongodbOperatorBackup,
     MysqlInnodbBackup,
     MysqlK8sOperatorBackup,
@@ -48,6 +49,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
             ("mysql", MysqlOperatorBackup),
             ("mysql-k8s", MysqlK8sOperatorBackup),
             ("mongodb", MongodbOperatorBackup),
+            ("mongodb-k8s", MongodbK8sOperatorBackup),
             ("etcd", EtcdBackup),
             ("postgresql", PostgresqlBackup),
             ("swift-proxy", SwiftBackup),
@@ -57,6 +59,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
         for charm_name, expected_backup_class in test_cases:
             with self.subTest(charm_name=charm_name, expected_backup_class=expected_backup_class):
                 mock_get_non_primary.reset_mock()
+                mock_get_mongodb_primary.reset_mock()
                 mock_get_leader.reset_mock()
                 backup_instance = get_charm_backup_instance(
                     charm_name,
@@ -70,7 +73,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                 if charm_name in ("mysql", "mysql-k8s"):
                     mock_get_non_primary.assert_called_once()
                     mock_get_leader.assert_not_called()
-                elif charm_name == "mongodb":
+                elif charm_name in ("mongodb", "mongodb-k8s"):
                     mock_get_mongodb_primary.assert_called_once_with([ANY], ANY)
                     mock_get_leader.assert_not_called()
                 else:
@@ -326,6 +329,27 @@ class TestMongodbOperatorBackup(unittest.TestCase):
         mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
         self.assertIn("mongodb-backup-metadata-", result.name)
         mock_write_text.assert_called_once_with(result, "backup-123")
+
+
+class TestMongodbK8sOperatorBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    @patch("jujubackupall.backup.ensure_path_exists")
+    def test_backup_and_download(self, mock_ensure_path_exists: Mock, mock_action: Mock):
+        mock_action.return_value = {
+            "backup-status": "backup started. backup id: 2026-09-30T08:37:11Z"
+        }
+        unit = Mock()
+        backup = MongodbK8sOperatorBackup(unit, backup_basedir=Path("/tmp"))
+
+        backup.backup()
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(Path("/tmp/backup-output"))
+
+        mock_action.assert_called_once_with(unit, "create-backup", DEFAULT_TASK_TIMEOUT)
+        self.assertEqual(backup.backup_id, "2026-09-30T08:37:11Z")
+        self.assertIn("mongodb-k8s-backup-metadata-", result.name)
+        mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
+        mock_write_text.assert_called_once_with(result, backup.backup_id)
 
 
 class TestZookeeperOperatorBackup(unittest.TestCase):
