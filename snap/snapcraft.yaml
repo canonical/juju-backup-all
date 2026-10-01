@@ -16,6 +16,7 @@ description: |
   * mysql-innodb-cluster
   * mysql
   * mysql-k8s
+  * mongodb
   * zookeeper
   * zookeeper-k8s
 

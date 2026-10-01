@@ -188,16 +188,18 @@ def test_build_and_deploy(
         (juju_k8s, s3_secret_k8s, "mysql-k8s"),
         (juju_k8s, s3_secret_k8s, "zookeeper-k8s"),
     ]:
+        s3_config = {
+            "endpoint": f"http://{minio_ip}:9000",
+            "bucket": f"{app}-backups",
+            "region": "us-east-1",
+            "s3-uri-style": "path",
+            "path": app,
+        }
         juju.deploy(
             "s3-integrator",
             app=f"s3-integrator-{app}",
             channel="2/stable",
-            config={
-                "endpoint": f"http://{minio_ip}:9000",
-                "bucket": f"{app}-backups",
-                "region": "us-east-1",
-                "s3-uri-style": "path",
-            },
+            config=s3_config,
         )
         juju.integrate(app, f"s3-integrator-{app}")
         juju.grant_secret("s3-credentials", f"s3-integrator-{app}")
