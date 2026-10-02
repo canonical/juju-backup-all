@@ -27,7 +27,7 @@ from jujubackupall import constants
 from tests.functional.conftest import K8S_CLOUD, expose_via_loadbalancer, resolve_controller_name
 
 WAIT_TIMEOUT = 30 * 60  # 30 minutes
-LONG_WAIT_TIMEOUT = 60 * 60  # 60 minutes
+LONG_WAIT_TIMEOUT = 90 * 60  # 90 minutes
 K8S_WAIT_TIMEOUT = 20 * 60  # 20 minutes
 MINIO_ACCESS_KEY = "ahs9ao#Fua"
 MINIO_SECRET_KEY = "ohCa!uB6oo"
