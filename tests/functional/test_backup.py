@@ -217,8 +217,8 @@ def test_build_and_deploy(
 
     # --- Wait all to be ready ---
 
-    juju_lxd.wait(jubilant.all_active, timeout=LONG_WAIT_TIMEOUT)
-    juju_k8s.wait(jubilant.all_active, timeout=LONG_WAIT_TIMEOUT)
+    juju_lxd.wait(jubilant.all_active, error=jubilant.any_error, timeout=LONG_WAIT_TIMEOUT)
+    juju_k8s.wait(jubilant.all_active, error=jubilant.any_error, timeout=LONG_WAIT_TIMEOUT)
 
 
 def _model_and_controller(juju: jubilant.Juju):
