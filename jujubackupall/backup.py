@@ -21,7 +21,6 @@ import json
 import os
 import shutil
 from abc import ABCMeta, abstractmethod
-from datetime import datetime
 from logging import getLogger
 from pathlib import Path
 from typing import Dict, List, TypeVar
@@ -240,19 +239,24 @@ class EtcdBackup(CharmBackup):
 
 
 class PostgresqlBackup(CharmBackup):
+    """Back up PostgreSQL through its S3-backed create-backup action."""
+
     charm_name = "postgresql"
-    date_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
-    pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
+    backup_action_name = "create-backup"
 
     def backup(self):
-        # we only need to create directory for postgres because mysql and etcd
-        # charms will create the directory by themselves
-        ssh_run_on_unit(
-            unit=self.unit, command=f"mkdir -p {self.backup_basedir}", timeout=self.timeout
-        )
-        self.backup_filepath = self.backup_basedir / self.pgdump_filename
-        backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
-        ssh_run_on_unit(unit=self.unit, command=backup_cmd, timeout=self.timeout)
+        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
+        self.backup_metadata = action_output
+
+        if not action_output.get("backup-status"):
+            raise BackupMetadataError("create-backup did not return backup metadata")
+
+    def download_backup(self, save_path: Path) -> Path:
+        ensure_path_exists(path=save_path)
+        metadata_filename = f"postgresql-backup-metadata-{get_datetime_string()}.json"
+        metadata_path = save_path / metadata_filename
+        metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
+        return metadata_path.absolute()
 
 
 class SwiftBackup(CharmBackup):

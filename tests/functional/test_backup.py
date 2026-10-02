@@ -430,7 +430,10 @@ def test_postgresql_backup(backup_location, juju_lxd: jubilant.Juju, tmp_path: P
     assert any(x.get("model") == model_name for x in output_dict.get("app_backups"))
     assert app_backup_entry.get("charm") in postgresql_app.charm
     assert expected_output_dir.exists()
-    assert glob.glob(str(expected_output_dir) + "/pgdump-all-databases*.gz")
+    metadata_files = list(expected_output_dir.glob("postgresql-backup-metadata-*.json"))
+    assert len(metadata_files) == 1
+    metadata = json.loads(metadata_files[0].read_text())
+    assert metadata.get("backup-status") == "backup created"
 
 
 @pytest.mark.parametrize("backup_location", ["/home/ubuntu/etcd-snapshots", "/home/ubuntu/abc"])

@@ -565,18 +565,46 @@ class TestEtcdBackup(unittest.TestCase):
 
 
 class TestPostgresqlBackup(unittest.TestCase):
-    @patch("jujubackupall.backup.ssh_run_on_unit")
-    def test_postgresql_backup(self, mock_ssh_run_on_unit: Mock):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_postgresql(self, mock_check_output_unit_action: Mock):
         mock_unit = Mock()
-        backup_basedir = Path("/home/ubuntu")
-        postgresql_backup_inst = PostgresqlBackup(mock_unit, backup_basedir=backup_basedir)
-        expected_path_string = backup_basedir / postgresql_backup_inst.pgdump_filename
-        postgresql_backup_inst.backup()
-        self.assertEqual(postgresql_backup_inst.backup_filepath, Path(expected_path_string))
-        mock_ssh_run_on_unit.assert_called_with(
-            unit=mock_unit,
-            command=f"sudo -u postgres pg_dumpall | gzip > {expected_path_string}",
-            timeout=DEFAULT_TASK_TIMEOUT,
+        action_output = {"backup-status": "backup created"}
+        mock_check_output_unit_action.return_value = action_output
+
+        backup = PostgresqlBackup(mock_unit, backup_basedir=Path("/home/ubuntu"))
+        backup.backup()
+
+        self.assertEqual(backup.backup_metadata, action_output)
+        mock_check_output_unit_action.assert_called_once_with(
+            mock_unit,
+            backup.backup_action_name,
+            DEFAULT_TASK_TIMEOUT,
+        )
+
+    @patch("jujubackupall.backup.check_output_unit_action", return_value={})
+    def test_backup_postgresql_requires_metadata(self, mock_check_output_unit_action: Mock):
+        backup = PostgresqlBackup(Mock(), backup_basedir=Path("/home/ubuntu"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.get_datetime_string", return_value="20261002-120000")
+    @patch("jujubackupall.backup.ensure_path_exists")
+    def test_download_backup_postgresql(self, mock_ensure_path_exists: Mock, mock_datetime: Mock):
+        backup = PostgresqlBackup(Mock(), backup_basedir=Path("/home/ubuntu"))
+        backup.backup_metadata = {"backup-status": "backup created"}
+        save_path = Path("backup-output")
+
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(save_path)
+
+        metadata_path = save_path / "postgresql-backup-metadata-20261002-120000.json"
+        self.assertEqual(result, metadata_path.absolute())
+        mock_ensure_path_exists.assert_called_once_with(path=save_path)
+        mock_datetime.assert_called_once_with()
+        mock_write_text.assert_called_once_with(
+            metadata_path,
+            json.dumps(backup.backup_metadata, indent=2, sort_keys=True),
         )
 
 
