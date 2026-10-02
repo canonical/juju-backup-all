@@ -496,6 +496,7 @@ def test_juju_client_config_backup(tmp_path: Path):
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + "/juju-*.gz")
 
+
 # postgresql backup requires minio to be exposed via load balancer and SSL certificates
 @pytest.mark.parametrize("backup_location", ["/home/ubuntu", "/home/ubuntu/abc"])
 def test_postgresql_backup(
@@ -551,7 +552,9 @@ def test_postgresql_backup(
         },
     )
     juju_lxd.wait(
-        lambda status: jubilant.all_active(status, postgresql_app_name, "s3-integrator-postgresql"),
+        lambda status: jubilant.all_active(
+            status, postgresql_app_name, "s3-integrator-postgresql"
+        ),
         timeout=WAIT_TIMEOUT,
     )
 

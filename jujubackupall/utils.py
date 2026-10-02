@@ -135,6 +135,7 @@ def get_mongodb_primary(units: List[Unit], timeout: int) -> Unit:
             return unit
     raise BackupMetadataError("get-primary did not return a matching primary unit")
 
+
 def get_postgresql_primary(units: List[Unit], timeout: int) -> Unit:
     """Return the PostgreSQL primary identified by the get-primary action."""
     action_output = check_output_unit_action(get_leader(units), "get-primary", timeout)

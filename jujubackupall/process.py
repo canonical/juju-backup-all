@@ -195,11 +195,7 @@ class ControllerProcessor:
                 timeout=self.timeout,
             )
             self._log("Backing up app.", app_name=app_name, model_name=model_name)
-            backup_action = getattr(charm_backup_instance, "backup_action", None)
-            if backup_action:
-                backup_action()
-            else:
-                charm_backup_instance.backup()
+            charm_backup_instance.backup()
             self._log("Downloading backup.", app_name=app_name, model_name=model_name)
             full_backup_path = self.generate_full_backup_path(model_name, app_name)
             resulting_backup_path = charm_backup_instance.download_backup(full_backup_path)

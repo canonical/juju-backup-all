@@ -130,9 +130,6 @@ class S3Backup(CharmBackup, metaclass=ABCMeta):
     def backup_id(self, backup_id: str):
         self._backup_id = backup_id
 
-    def backup(self):
-        self.backup_action()
-
     def download_backup(self, save_path: Path) -> Path:
         # The S3 backup is not a file to SCP from the unit. Instead,
         # store the metadata payload returned by the action in the configured
@@ -150,6 +147,7 @@ class MysqlBackup(S3Backup, metaclass=ABCMeta):
     def backup(self):
         action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
         self.backup_id = action_output.get("backup-id")
+        self.backup_metadata = action_output
 
         if not self.backup_id:
             raise BackupMetadataError("create-backup did not return backup metadata")
@@ -187,6 +185,12 @@ class MysqlOperatorBackup(MysqlBackup):
     charm_name = "mysql"
 
 
+class MysqlK8sOperatorBackup(MysqlBackup):
+    """Back up the MySQL Operator k8s charm through its S3-backed create-backup action."""
+
+    charm_name = "mysql-k8s"
+
+
 class MongodbOperatorBackup(S3Backup):
     """Back up the MongoDB Operator charm through its S3-backed create-backup action."""
 
@@ -210,12 +214,6 @@ class MongodbK8sOperatorBackup(MongodbOperatorBackup):
     charm_name = "mongodb-k8s"
 
 
-class MysqlK8sOperatorBackup(MysqlBackup):
-    """Back up the MySQL Operator k8s charm through its S3-backed create-backup action."""
-
-    charm_name = "mysql-k8s"
-
-
 class ZookeeperOperatorBackup(ZooKeeperBackup):
     """Back up the ZooKeeper charm through its S3-backed backup action."""
 
@@ -226,6 +224,43 @@ class ZookeeperK8sOperatorBackup(ZooKeeperBackup):
     """Back up the ZooKeeper K8s charm through its S3-backed backup action."""
 
     charm_name = "zookeeper-k8s"
+
+
+class PostgresqlBackup(CharmBackup):
+    """Back up PostgreSQL through its S3-backed backup action."""
+
+    charm_name = "postgresql"
+    date_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
+    pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
+    backup_action_name = "create-backup"
+
+    def backup(self):
+        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
+        backup_status = action_output.get("backup-status")
+        self.backup_metadata = action_output
+
+        if not backup_status:
+            raise BackupMetadataError("create-backup did not return backup metadata")
+
+    def backup_dump(self):
+        """Create a local dump using the deprecated PostgreSQL backup method."""
+        ssh_run_on_unit(
+            unit=self.unit, command=f"mkdir -p {self.backup_basedir}", timeout=self.timeout
+        )
+        self.backup_filepath = self.backup_basedir / self.pgdump_filename
+        backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
+        ssh_run_on_unit(unit=self.unit, command=backup_cmd, timeout=self.timeout)
+        self.backup_metadata = None
+
+    def download_backup(self, save_path: Path) -> Path:
+        if not self.backup_metadata:
+            return super().download_backup(save_path)
+
+        ensure_path_exists(path=save_path)
+        metadata_filename = "postgresql-backup-metadata-{}.json".format(get_datetime_string())
+        metadata_path = save_path / metadata_filename
+        metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
+        return metadata_path.absolute()
 
 
 class MysqlInnodbBackup(MysqlDumpBackup):
@@ -243,6 +278,7 @@ class EtcdBackup(CharmBackup):
         self.backup_filepath = Path(action_output.get("snapshot").get("path"))
 
 
+<<<<<<< HEAD
 class PostgresqlBackup(CharmBackup):
 <<<<<<< HEAD
     """Back up PostgreSQL through its S3-backed create-backup action."""
@@ -301,6 +337,8 @@ class PostgresqlBackup(CharmBackup):
         return metadata_path.absolute()
 
 
+=======
+>>>>>>> a5f0de7 (refactor: method orders and remove backup_action)
 class SwiftBackup(CharmBackup):
     charm_name = "swift-proxy"
 

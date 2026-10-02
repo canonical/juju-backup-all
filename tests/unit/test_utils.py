@@ -22,7 +22,6 @@ from jujubackupall.utils import (
     get_leader,
     get_mongodb_primary,
     get_non_primary,
-    get_postgresql_primary,
     parse_charm_name,
     run_with_timeout,
 )
