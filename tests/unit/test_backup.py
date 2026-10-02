@@ -34,16 +34,22 @@ from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
 
 
 class TestGetCharmBackupInstance(unittest.TestCase):
+    @patch("jujubackupall.backup.get_postgresql_primary")
     @patch("jujubackupall.backup.get_non_primary")
     @patch("jujubackupall.backup.get_mongodb_primary")
     @patch("jujubackupall.backup.get_leader")
     def test_get_backup_instance(
-        self, mock_get_leader: Mock, mock_get_mongodb_primary: Mock, mock_get_non_primary: Mock
+        self,
+        mock_get_leader: Mock,
+        mock_get_mongodb_primary: Mock,
+        mock_get_non_primary: Mock,
+        mock_get_postgresql_primary: Mock,
     ):
         mock_unit = Mock()
         mock_get_leader.return_value = mock_unit
         mock_get_mongodb_primary.return_value = mock_unit
         mock_get_non_primary.return_value = mock_unit
+        mock_get_postgresql_primary.return_value = mock_unit
         test_cases = [
             ("mysql-innodb-cluster", MysqlInnodbBackup),
             ("mysql", MysqlOperatorBackup),
@@ -60,6 +66,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
             with self.subTest(charm_name=charm_name, expected_backup_class=expected_backup_class):
                 mock_get_non_primary.reset_mock()
                 mock_get_mongodb_primary.reset_mock()
+                mock_get_postgresql_primary.reset_mock()
                 mock_get_leader.reset_mock()
                 backup_instance = get_charm_backup_instance(
                     charm_name,
@@ -75,6 +82,9 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                     mock_get_leader.assert_not_called()
                 elif charm_name in ("mongodb", "mongodb-k8s"):
                     mock_get_mongodb_primary.assert_called_once_with([ANY], ANY)
+                    mock_get_leader.assert_not_called()
+                elif charm_name == "postgresql":
+                    mock_get_postgresql_primary.assert_called_once_with([ANY], ANY)
                     mock_get_leader.assert_not_called()
                 else:
                     mock_get_non_primary.assert_not_called()

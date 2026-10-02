@@ -40,6 +40,7 @@ from jujubackupall.utils import (
     get_leader,
     get_mongodb_primary,
     get_non_primary,
+    get_postgresql_primary,
     scp_from_unit,
     ssh_run_on_unit,
 )
@@ -477,6 +478,8 @@ def get_charm_backup_instance(
         unit = get_non_primary(units, timeout)
     elif charm_name in (MongodbOperatorBackup.charm_name, MongodbK8sOperatorBackup.charm_name):
         unit = get_mongodb_primary(units, timeout)
+    elif charm_name == PostgresqlBackup.charm_name:
+        unit = get_postgresql_primary(units, timeout)
     else:
         unit = get_leader(units)
     if charm_name == MysqlInnodbBackup.charm_name:

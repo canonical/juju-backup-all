@@ -22,6 +22,7 @@ from jujubackupall.utils import (
     get_leader,
     get_mongodb_primary,
     get_non_primary,
+    get_postgresql_primary,
     parse_charm_name,
     run_with_timeout,
 )
@@ -114,6 +115,28 @@ class TestGetMongodbPrimary(unittest.TestCase):
 
         with self.assertRaises(BackupMetadataError):
             get_mongodb_primary(units, ANY)
+
+
+class TestGetPostgresqlPrimary(unittest.TestCase):
+    @patch("jujubackupall.utils.get_leader")
+    @patch("jujubackupall.utils.check_output_unit_action")
+    def test_returns_unit_named_by_get_primary_action(self, mock_action: Mock, mock_leader: Mock):
+        units = [_mysql_unit("postgresql/0"), _mysql_unit("postgresql/1")]
+        mock_leader.return_value = units[0]
+        mock_action.return_value = {"primary": "postgresql/1"}
+
+        self.assertIs(get_postgresql_primary(units, ANY), units[1])
+        mock_action.assert_called_once_with(units[0], "get-primary", ANY)
+
+    @patch("jujubackupall.utils.get_leader")
+    @patch("jujubackupall.utils.check_output_unit_action")
+    def test_missing_primary_raises(self, mock_action: Mock, mock_leader: Mock):
+        units = [_mysql_unit("postgresql/0")]
+        mock_leader.return_value = units[0]
+        mock_action.return_value = {"primary": "postgresql/1"}
+
+        with self.assertRaises(BackupMetadataError):
+            get_postgresql_primary(units, ANY)
 
 
 class TestParseCharmName(unittest.TestCase):
