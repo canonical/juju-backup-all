@@ -544,6 +544,12 @@ def test_postgresql_backup(
             juju_k8s.wait(
                 lambda status: jubilant.all_active(status, "minio"), timeout=WAIT_TIMEOUT
             )
+            # Re-expose MinIO after its config hook resets the Service to ClusterIP.
+            tls_minio_ip = expose_via_loadbalancer(k8s_host_juju, juju_k8s, "minio")
+            assert tls_minio_ip == minio_ip, (
+                f"MinIO LoadBalancer IP changed from {minio_ip} to {tls_minio_ip}; "
+                "the TLS certificate no longer matches the endpoint"
+            )
             juju_lxd.deploy(
                 "s3-integrator",
                 app=s3_integrator_app_name,
