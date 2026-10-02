@@ -24,7 +24,7 @@ from asyncio import wait_for
 from concurrent.futures import TimeoutError as CFTimeoutError
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Coroutine, List, Tuple
+from typing import Coroutine, List, Optional, Tuple
 
 from juju.action import Action
 from juju.controller import Controller
@@ -146,21 +146,18 @@ def get_postgresql_primary(units: List[Unit], timeout: int) -> Unit:
     raise BackupMetadataError("get-primary did not return a matching primary unit")
 
 
-def get_postgresql_primary(units: List[Unit], timeout: int) -> Unit:
-    """Return the PostgreSQL primary identified by the get-primary action."""
-    action_output = check_output_unit_action(get_leader(units), "get-primary", timeout)
-    primary_name = action_output.get("primary")
-    for unit in units:
-        if unit.name == primary_name:
-            return unit
-    raise BackupMetadataError("get-primary did not return a matching primary unit")
-
-
 def parse_charm_name(charm_url: str) -> str:
     parsed_charm_name = charm_url.split(":")[1].rsplit("-", 1)[0]
     if "/" in parsed_charm_name:
         return parsed_charm_name.split("/")[-1]
     return parsed_charm_name
+
+
+def parse_charm_revision(charm_url: str) -> Optional[int]:
+    try:
+        return int(charm_url.rsplit("-", 1)[1])
+    except (IndexError, ValueError):
+        return None
 
 
 def get_datetime_string() -> str:

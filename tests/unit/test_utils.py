@@ -22,7 +22,9 @@ from jujubackupall.utils import (
     get_leader,
     get_mongodb_primary,
     get_non_primary,
+    get_postgresql_primary,
     parse_charm_name,
+    parse_charm_revision,
     run_with_timeout,
 )
 
@@ -148,6 +150,11 @@ class TestParseCharmName(unittest.TestCase):
         charm_url = "cs:mysql-innodb-cluster-9"
         result = parse_charm_name(charm_url)
         self.assertEqual(result, "mysql-innodb-cluster")
+
+    def test_parse_charm_revision(self):
+        self.assertEqual(parse_charm_revision("ch:postgresql-1217"), 1217)
+        self.assertEqual(parse_charm_revision("cs:~owner/postgresql-519"), 519)
+        self.assertIsNone(parse_charm_revision("local:postgresql"))
 
 
 class TestConnectController(unittest.TestCase):

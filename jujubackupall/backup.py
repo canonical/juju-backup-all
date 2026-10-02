@@ -21,16 +21,21 @@ import json
 import os
 import shutil
 from abc import ABCMeta, abstractmethod
+from datetime import datetime
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List, TypeVar
+from typing import Dict, List, Optional, TypeVar
 
 import attr
 from juju.controller import Controller
 from juju.errors import JujuAPIError
 from juju.unit import Unit
 
-from jujubackupall.constants import DEFAULT_TASK_TIMEOUT, MAX_CONTROLLER_BACKUP_RETRIES
+from jujubackupall.constants import (
+    DEFAULT_TASK_TIMEOUT,
+    MAX_CONTROLLER_BACKUP_RETRIES,
+    POSTGRESQL_OPERATOR_MIN_REVISION,
+)
 from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
 from jujubackupall.utils import (
     backup_controller,
@@ -226,43 +231,6 @@ class ZookeeperK8sOperatorBackup(ZooKeeperBackup):
     charm_name = "zookeeper-k8s"
 
 
-class PostgresqlBackup(CharmBackup):
-    """Back up PostgreSQL through its S3-backed backup action."""
-
-    charm_name = "postgresql"
-    date_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
-    pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
-    backup_action_name = "create-backup"
-
-    def backup(self):
-        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
-        backup_status = action_output.get("backup-status")
-        self.backup_metadata = action_output
-
-        if not backup_status:
-            raise BackupMetadataError("create-backup did not return backup metadata")
-
-    def backup_dump(self):
-        """Create a local dump using the deprecated PostgreSQL backup method."""
-        ssh_run_on_unit(
-            unit=self.unit, command=f"mkdir -p {self.backup_basedir}", timeout=self.timeout
-        )
-        self.backup_filepath = self.backup_basedir / self.pgdump_filename
-        backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
-        ssh_run_on_unit(unit=self.unit, command=backup_cmd, timeout=self.timeout)
-        self.backup_metadata = None
-
-    def download_backup(self, save_path: Path) -> Path:
-        if not self.backup_metadata:
-            return super().download_backup(save_path)
-
-        ensure_path_exists(path=save_path)
-        metadata_filename = "postgresql-backup-metadata-{}.json".format(get_datetime_string())
-        metadata_path = save_path / metadata_filename
-        metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
-        return metadata_path.absolute()
-
-
 class MysqlInnodbBackup(MysqlDumpBackup):
     charm_name = "mysql-innodb-cluster"
 
@@ -278,24 +246,33 @@ class EtcdBackup(CharmBackup):
         self.backup_filepath = Path(action_output.get("snapshot").get("path"))
 
 
-<<<<<<< HEAD
-class PostgresqlBackup(CharmBackup):
-<<<<<<< HEAD
-    """Back up PostgreSQL through its S3-backed create-backup action."""
-
-    charm_name = "postgresql"
-=======
-    """Back up PostgreSQL through its S3-backed backup action."""
+class ReactivePostgresqlBackup(CharmBackup):
+    """Back up the reactive PostgreSQL charm using pg_dumpall."""
 
     charm_name = "postgresql"
     date_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
     pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
->>>>>>> 2bed025 (feat: add postgresql backup)
+
+    def backup(self):
+        self.backup_dump()
+
+    def backup_dump(self):
+        """Create a local dump using the reactive PostgreSQL backup method."""
+        ssh_run_on_unit(
+            unit=self.unit, command=f"mkdir -p {self.backup_basedir}", timeout=self.timeout
+        )
+        self.backup_filepath = self.backup_basedir / self.pgdump_filename
+        backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
+        ssh_run_on_unit(unit=self.unit, command=backup_cmd, timeout=self.timeout)
+
+
+class PostgresqlOperatorBackup(CharmBackup):
+    """Back up the PostgreSQL VM operator through its create-backup action."""
+
+    charm_name = "postgresql"
     backup_action_name = "create-backup"
 
-    # Backup (old) using dump, deprecated in favor of create-backup
     def backup(self):
-<<<<<<< HEAD
         action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
         self.backup_metadata = action_output
 
@@ -304,41 +281,12 @@ class PostgresqlBackup(CharmBackup):
 
     def download_backup(self, save_path: Path) -> Path:
         ensure_path_exists(path=save_path)
-        metadata_filename = f"postgresql-backup-metadata-{get_datetime_string()}.json"
-=======
-        # we only need to create directory for postgres because mysql and etcd
-        # charms will create the directory by themselves
-        ssh_run_on_unit(
-            unit=self.unit, command=f"mkdir -p {self.backup_basedir}", timeout=self.timeout
-        )
-        self.backup_filepath = self.backup_basedir / self.pgdump_filename
-        backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
-        ssh_run_on_unit(unit=self.unit, command=backup_cmd, timeout=self.timeout)
-        self.backup_metadata = None
-
-    # Backup (new) using the create-backup action
-    def backup_action(self):
-        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
-        backup_status = action_output.get("backup-status")
-        self.backup_metadata = action_output
-
-        if not backup_status:
-            raise BackupMetadataError("create-backup did not return backup metadata")
-
-    def download_backup(self, save_path: Path) -> Path:
-        if not self.backup_metadata:
-            return super().download_backup(save_path)
-
-        ensure_path_exists(path=save_path)
-        metadata_filename = "postgresql-backup-metadata-{}.json".format(get_datetime_string())
->>>>>>> 2bed025 (feat: add postgresql backup)
+        metadata_filename = f"{self.charm_name}-backup-metadata-{get_datetime_string()}.json"
         metadata_path = save_path / metadata_filename
         metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
         return metadata_path.absolute()
 
 
-=======
->>>>>>> a5f0de7 (refactor: method orders and remove backup_action)
 class SwiftBackup(CharmBackup):
     charm_name = "swift-proxy"
 
@@ -550,6 +498,7 @@ def get_charm_backup_instance(
     backup_location_on_mysql: Path,
     backup_location_on_etcd: Path,
     timeout: int,
+    charm_revision: Optional[int] = None,
 ) -> CharmBackupType:
     if charm_name in (MysqlOperatorBackup.charm_name, MysqlK8sOperatorBackup.charm_name):
         # The charm refuses to back up using the cluster primary.
@@ -557,7 +506,7 @@ def get_charm_backup_instance(
         unit = get_non_primary(units, timeout)
     elif charm_name in (MongodbOperatorBackup.charm_name, MongodbK8sOperatorBackup.charm_name):
         unit = get_mongodb_primary(units, timeout)
-    elif charm_name == PostgresqlBackup.charm_name:
+    elif charm_name == PostgresqlOperatorBackup.charm_name:
         unit = get_postgresql_primary(units, timeout)
     else:
         unit = get_leader(units)
@@ -579,8 +528,13 @@ def get_charm_backup_instance(
         return MongodbK8sOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
     if charm_name == EtcdBackup.charm_name:
         return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd, timeout=timeout)
-    if charm_name == PostgresqlBackup.charm_name:
-        return PostgresqlBackup(
+    if charm_name == PostgresqlOperatorBackup.charm_name:
+        backup_class = (
+            PostgresqlOperatorBackup
+            if charm_revision is not None and charm_revision >= POSTGRESQL_OPERATOR_MIN_REVISION
+            else ReactivePostgresqlBackup
+        )
+        return backup_class(
             unit=unit,
             backup_basedir=backup_location_on_postgresql,
             timeout=timeout,
