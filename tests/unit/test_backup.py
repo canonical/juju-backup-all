@@ -17,7 +17,8 @@ from jujubackupall.backup import (
     MysqlInnodbBackup,
     MysqlK8sOperatorBackup,
     MysqlOperatorBackup,
-    PostgresqlBackup,
+    PostgresqlOperatorBackup,
+    ReactivePostgresqlBackup,
     SwiftBackup,
     ZookeeperK8sOperatorBackup,
     ZookeeperOperatorBackup,
@@ -34,32 +35,38 @@ from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
 
 
 class TestGetCharmBackupInstance(unittest.TestCase):
+    @patch("jujubackupall.backup.get_postgresql_primary")
     @patch("jujubackupall.backup.get_non_primary")
     @patch("jujubackupall.backup.get_mongodb_primary")
     @patch("jujubackupall.backup.get_leader")
     def test_get_backup_instance(
-        self, mock_get_leader: Mock, mock_get_mongodb_primary: Mock, mock_get_non_primary: Mock
+        self,
+        mock_get_leader: Mock,
+        mock_get_mongodb_primary: Mock,
+        mock_get_non_primary: Mock,
+        mock_get_postgresql_primary: Mock,
     ):
         mock_unit = Mock()
         mock_get_leader.return_value = mock_unit
         mock_get_mongodb_primary.return_value = mock_unit
         mock_get_non_primary.return_value = mock_unit
+        mock_get_postgresql_primary.return_value = mock_unit
         test_cases = [
-            ("mysql-innodb-cluster", MysqlInnodbBackup),
-            ("mysql", MysqlOperatorBackup),
-            ("mysql-k8s", MysqlK8sOperatorBackup),
-            ("mongodb", MongodbOperatorBackup),
-            ("mongodb-k8s", MongodbK8sOperatorBackup),
-            ("etcd", EtcdBackup),
-            ("postgresql", PostgresqlBackup),
-            ("swift-proxy", SwiftBackup),
-            ("zookeeper", ZookeeperOperatorBackup),
-            ("zookeeper-k8s", ZookeeperK8sOperatorBackup),
+            ("mysql-innodb-cluster", MysqlInnodbBackup, None),
+            ("mysql", MysqlOperatorBackup, None),
+            ("mysql-k8s", MysqlK8sOperatorBackup, None),
+            ("mongodb", MongodbOperatorBackup, None),
+            ("mongodb-k8s", MongodbK8sOperatorBackup, None),
+            ("etcd", EtcdBackup, None),
+            ("postgresql", ReactivePostgresqlBackup, 519),
+            ("postgresql", PostgresqlOperatorBackup, 1217),
+            ("swift-proxy", SwiftBackup, None),
         ]
-        for charm_name, expected_backup_class in test_cases:
+        for charm_name, expected_backup_class, charm_revision in test_cases:
             with self.subTest(charm_name=charm_name, expected_backup_class=expected_backup_class):
                 mock_get_non_primary.reset_mock()
                 mock_get_mongodb_primary.reset_mock()
+                mock_get_postgresql_primary.reset_mock()
                 mock_get_leader.reset_mock()
                 backup_instance = get_charm_backup_instance(
                     charm_name,
@@ -68,6 +75,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                     Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
                     Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
                     ANY,
+                    charm_revision=charm_revision,
                 )
                 self.assertIsInstance(backup_instance, expected_backup_class)
                 if charm_name in ("mysql", "mysql-k8s"):
@@ -76,7 +84,11 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                 elif charm_name in ("mongodb", "mongodb-k8s"):
                     mock_get_mongodb_primary.assert_called_once_with([ANY], ANY)
                     mock_get_leader.assert_not_called()
+                elif charm_name == "postgresql":
+                    mock_get_postgresql_primary.assert_called_once_with([ANY], ANY)
+                    mock_get_leader.assert_not_called()
                 else:
+                    mock_get_postgresql_primary.assert_not_called()
                     mock_get_non_primary.assert_not_called()
                     if charm_name in ("zookeeper", "zookeeper-k8s"):
                         mock_get_leader.assert_called()
@@ -252,7 +264,7 @@ class TestMysqlOperatorBackup(unittest.TestCase):
         backup = MysqlOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
         backup.backup()
 
-        self.assertEqual(backup.backup_id, "backup-123")
+        self.assertEqual(backup.backup_metadata, mock_check_output_unit_action.return_value)
         mock_check_output_unit_action.assert_called_once_with(
             mock_unit,
             "create-backup",
@@ -270,6 +282,7 @@ class TestMysqlOperatorBackup(unittest.TestCase):
     def test_download_backup_mysql_operator(self, mock_ensure_path_exists: Mock):
         mock_unit = Mock()
         backup = MysqlOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup_metadata = {"backup-id": "backup-123"}
         backup.backup_id = "backup-123"
 
         with patch.object(Path, "write_text", autospec=True) as mock_write_text:
@@ -278,6 +291,44 @@ class TestMysqlOperatorBackup(unittest.TestCase):
         mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
         self.assertTrue(str(result).startswith("/tmp/backup-output/"))
         self.assertIn("mysql-backup-metadata-", str(result))
+        mock_write_text.assert_called_once()
+
+
+class TestMysqlK8sOperatorBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_mysql_k8s(self, mock_check_output_unit_action: Mock):
+        mock_unit = Mock()
+        mock_check_output_unit_action.return_value = {"backup-id": "backup-123"}
+
+        backup = MysqlK8sOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup()
+
+        self.assertEqual(backup.backup_id, mock_check_output_unit_action.return_value["backup-id"])
+        mock_check_output_unit_action.assert_called_once_with(
+            mock_unit,
+            "create-backup",
+            DEFAULT_TASK_TIMEOUT,
+        )
+
+    @patch("jujubackupall.backup.check_output_unit_action", return_value={})
+    def test_backup_mysql_k8s_requires_backup_id(self, mock_check_output_unit_action: Mock):
+        backup = MysqlK8sOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.ensure_path_exists")
+    def test_download_backup_mysql_k8s(self, mock_ensure_path_exists: Mock):
+        mock_unit = Mock()
+        backup = MysqlK8sOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
+        backup.backup_id = "backup-123"
+
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(Path("/tmp/backup-output"))
+
+        mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
+        self.assertTrue(str(result).startswith("/tmp/backup-output/"))
+        self.assertIn("mysql-k8s-backup-metadata-", str(result))
         mock_write_text.assert_called_once()
 
 
@@ -506,44 +557,6 @@ class TestZookeeperK8sOperatorBackup(unittest.TestCase):
         mock_write_text.assert_called_once()
 
 
-class TestMysqlK8sOperatorBackup(unittest.TestCase):
-    @patch("jujubackupall.backup.check_output_unit_action")
-    def test_backup_mysql_k8s(self, mock_check_output_unit_action: Mock):
-        mock_unit = Mock()
-        mock_check_output_unit_action.return_value = {"backup-id": "backup-123"}
-
-        backup = MysqlK8sOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
-        backup.backup()
-
-        self.assertEqual(backup.backup_id, mock_check_output_unit_action.return_value["backup-id"])
-        mock_check_output_unit_action.assert_called_once_with(
-            mock_unit,
-            "create-backup",
-            DEFAULT_TASK_TIMEOUT,
-        )
-
-    @patch("jujubackupall.backup.check_output_unit_action", return_value={})
-    def test_backup_mysql_k8s_requires_backup_id(self, mock_check_output_unit_action: Mock):
-        backup = MysqlK8sOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
-
-        with self.assertRaises(BackupMetadataError):
-            backup.backup()
-
-    @patch("jujubackupall.backup.ensure_path_exists")
-    def test_download_backup_mysql_k8s(self, mock_ensure_path_exists: Mock):
-        mock_unit = Mock()
-        backup = MysqlK8sOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
-        backup.backup_id = "backup-123"
-
-        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
-            result = backup.download_backup(Path("/tmp/backup-output"))
-
-        mock_ensure_path_exists.assert_called_once_with(path=Path("/tmp/backup-output"))
-        self.assertTrue(str(result).startswith("/tmp/backup-output/"))
-        self.assertIn("mysql-k8s-backup-metadata-", str(result))
-        mock_write_text.assert_called_once()
-
-
 class TestEtcdBackup(unittest.TestCase):
     @patch("jujubackupall.backup.check_output_unit_action")
     @patch("jujubackupall.backup.ssh_run_on_unit")
@@ -564,19 +577,116 @@ class TestEtcdBackup(unittest.TestCase):
         )
 
 
-class TestPostgresqlBackup(unittest.TestCase):
+class TestReactivePostgresqlBackup(unittest.TestCase):
     @patch("jujubackupall.backup.ssh_run_on_unit")
-    def test_postgresql_backup(self, mock_ssh_run_on_unit: Mock):
+    @patch.object(
+        ReactivePostgresqlBackup,
+        "pgdump_filename",
+        "pgdump-all-databases-20260922-120000.gz",
+    )
+    def test_postgresql_dump_backup(self, mock_ssh_run_on_unit: Mock):
         mock_unit = Mock()
         backup_basedir = Path("/home/ubuntu")
-        postgresql_backup_inst = PostgresqlBackup(mock_unit, backup_basedir=backup_basedir)
-        expected_path_string = backup_basedir / postgresql_backup_inst.pgdump_filename
-        postgresql_backup_inst.backup()
-        self.assertEqual(postgresql_backup_inst.backup_filepath, Path(expected_path_string))
-        mock_ssh_run_on_unit.assert_called_with(
+
+        backup = ReactivePostgresqlBackup(mock_unit, backup_basedir=backup_basedir)
+        backup.backup_dump()
+
+        expected_path = backup_basedir / "pgdump-all-databases-20260922-120000.gz"
+        self.assertEqual(backup.backup_filepath, expected_path)
+        mock_ssh_run_on_unit.assert_any_call(
             unit=mock_unit,
-            command=f"sudo -u postgres pg_dumpall | gzip > {expected_path_string}",
+            command=f"mkdir -p {backup_basedir}",
             timeout=DEFAULT_TASK_TIMEOUT,
+        )
+        mock_ssh_run_on_unit.assert_any_call(
+            unit=mock_unit,
+            command=f"sudo -u postgres pg_dumpall | gzip > {expected_path}",
+            timeout=DEFAULT_TASK_TIMEOUT,
+        )
+
+    @patch.object(ReactivePostgresqlBackup, "backup_dump")
+    def test_backup_uses_dump(self, mock_backup_dump: Mock):
+        backup = ReactivePostgresqlBackup(Mock(), backup_basedir=Path("/home/ubuntu"))
+
+        backup.backup()
+
+        mock_backup_dump.assert_called_once_with()
+
+    @patch("jujubackupall.backup.ensure_path_exists")
+    @patch("jujubackupall.backup.scp_from_unit")
+    @patch("jujubackupall.backup.ssh_run_on_unit")
+    def test_download_backup_postgresql_dump(
+        self,
+        mock_ssh_run_on_unit: Mock,
+        mock_scp_from_unit: Mock,
+        mock_ensure_path_exists: Mock,
+    ):
+        save_path = Path("my-path")
+        backup_filepath = Path("/var/backups/pgdump-all-databases-20260922-120000")
+        mock_unit = Mock()
+        backup = ReactivePostgresqlBackup(mock_unit, backup_basedir=Path("/home/ubuntu"))
+        backup.backup_filepath = backup_filepath
+
+        result = backup.download_backup(save_path)
+
+        self.assertEqual(result, (save_path / backup_filepath.name).absolute())
+        mock_ensure_path_exists.assert_called_once_with(path=save_path)
+        mock_scp_from_unit.assert_called_once_with(
+            unit=mock_unit,
+            source=str(backup_filepath),
+            timeout=DEFAULT_TASK_TIMEOUT,
+            destination=str(save_path),
+        )
+        mock_ssh_run_on_unit.assert_called_once_with(
+            unit=mock_unit,
+            command="sudo rm {}".format(backup_filepath),
+            timeout=DEFAULT_TASK_TIMEOUT,
+        )
+
+
+class TestPostgresqlOperatorBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_postgresql_operator(self, mock_check_output_unit_action: Mock):
+        mock_unit = Mock()
+        action_output = {"backup-status": "backup created"}
+        mock_check_output_unit_action.return_value = action_output
+
+        backup = PostgresqlOperatorBackup(mock_unit, backup_basedir=Path("/home/ubuntu"))
+        backup.backup()
+
+        self.assertEqual(backup.backup_metadata, action_output)
+        mock_check_output_unit_action.assert_called_once_with(
+            mock_unit, "create-backup", DEFAULT_TASK_TIMEOUT
+        )
+
+    @patch("jujubackupall.backup.check_output_unit_action", return_value={})
+    def test_backup_postgresql_operator_requires_metadata(
+        self, mock_check_output_unit_action: Mock
+    ):
+        backup = PostgresqlOperatorBackup(Mock(), backup_basedir=Path("/home/ubuntu"))
+
+        with self.assertRaises(BackupMetadataError):
+            backup.backup()
+
+    @patch("jujubackupall.backup.get_datetime_string", return_value="20261002-120000")
+    @patch("jujubackupall.backup.ensure_path_exists")
+    def test_download_backup_postgresql_operator(
+        self, mock_ensure_path_exists: Mock, mock_datetime: Mock
+    ):
+        backup = PostgresqlOperatorBackup(Mock(), backup_basedir=Path("/home/ubuntu"))
+        backup.backup_metadata = {"backup-status": "backup created"}
+        save_path = Path("backup-output")
+
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(save_path)
+
+        metadata_path = save_path / "postgresql-backup-metadata-20261002-120000.json"
+        self.assertEqual(result, metadata_path.absolute())
+        mock_ensure_path_exists.assert_called_once_with(path=save_path)
+        mock_datetime.assert_called_once_with()
+        mock_write_text.assert_called_once_with(
+            metadata_path,
+            json.dumps(backup.backup_metadata, indent=2, sort_keys=True),
         )
 
 

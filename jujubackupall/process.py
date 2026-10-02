@@ -19,7 +19,7 @@
 """Module that processes the desired backups."""
 import logging
 from pathlib import Path
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Optional
 
 from juju.application import Application
 from juju.controller import Controller
@@ -48,6 +48,7 @@ from jujubackupall.utils import (
     connect_model,
     get_all_controllers,
     parse_charm_name,
+    parse_charm_revision,
 )
 
 logger = logging.getLogger(__name__)
@@ -176,12 +177,24 @@ class ControllerProcessor:
         for app_name, app in model.applications.items():
             charm_url = app.data.get("charm-url")
             charm_name = parse_charm_name(charm_url)
+            charm_revision = parse_charm_revision(charm_url)
             if charm_name in self.apps_to_backup:
                 self.backup_app(
-                    app=app, app_name=app_name, charm_name=charm_name, model_name=model_name
+                    app=app,
+                    app_name=app_name,
+                    charm_name=charm_name,
+                    model_name=model_name,
+                    charm_revision=charm_revision,
                 )
 
-    def backup_app(self, app: Application, app_name: str, charm_name: str, model_name: str):
+    def backup_app(
+        self,
+        app: Application,
+        app_name: str,
+        charm_name: str,
+        model_name: str,
+        charm_revision: Optional[int] = None,
+    ):
         try:
             charm_backup_instance = get_charm_backup_instance(
                 charm_name=charm_name,
@@ -190,6 +203,7 @@ class ControllerProcessor:
                 backup_location_on_mysql=self.backup_location_on_mysql,
                 backup_location_on_etcd=self.backup_location_on_etcd,
                 timeout=self.timeout,
+                charm_revision=charm_revision,
             )
             self._log("Backing up app.", app_name=app_name, model_name=model_name)
             charm_backup_instance.backup()

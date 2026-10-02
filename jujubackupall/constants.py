@@ -33,6 +33,7 @@ MAX_CONTROLLER_BACKUP_RETRIES = 3
 # NOTE: Workaround for https://github.com/juju/python-libjuju/issues/523
 MAX_FRAME_SIZE = 2**64
 DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT = "/home/ubuntu"
+POSTGRESQL_OPERATOR_MIN_REVISION = 1217
 DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT = "/var/backups/mysql"
 DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT = "/home/ubuntu/etcd-snapshots"
 DEFAULT_TASK_TIMEOUT = 60 * 10  # 10 minutes
