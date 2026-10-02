@@ -43,6 +43,14 @@ def get_supported_backup_charms_but(app):
     return filter(lambda charm: charm != app, constants.SUPPORTED_BACKUP_CHARMS)
 
 
+@pytest.fixture(scope="module")
+def s3_secret_lxd(juju_lxd: jubilant.Juju):
+    """Create LXD-model S3 credentials for integrators used by the test suite."""
+    return juju_lxd.add_secret(
+        "s3-credentials", {"access-key": MINIO_ACCESS_KEY, "secret-key": MINIO_SECRET_KEY}
+    )
+
+
 @pytest.mark.juju_setup
 def test_deploy_k8s_cloud(k8s_host_juju: jubilant.Juju, request: pytest.FixtureRequest):
     """Deploy and configure the k8s charm, and register it as a Juju cloud."""
@@ -81,7 +89,10 @@ def test_deploy_k8s_cloud(k8s_host_juju: jubilant.Juju, request: pytest.FixtureR
 
 @pytest.mark.juju_setup
 def test_build_and_deploy(
-    juju_lxd: jubilant.Juju, juju_k8s: jubilant.Juju, k8s_host_juju: jubilant.Juju
+    juju_lxd: jubilant.Juju,
+    juju_k8s: jubilant.Juju,
+    k8s_host_juju: jubilant.Juju,
+    s3_secret_lxd,
 ):
     """Deploy all applications."""
     # --- Minio S3 storage ---
@@ -193,13 +204,12 @@ def test_build_and_deploy(
     juju_k8s.wait(lambda status: jubilant.all_active(status, "minio"), timeout=WAIT_TIMEOUT)
 
     minio_ip = expose_via_loadbalancer(k8s_host_juju, juju_k8s, "minio")
-    s3_secret = juju_lxd.add_secret("s3-credentials", minio_credentials)
     s3_secret_k8s = juju_k8s.add_secret("s3-credentials", minio_credentials)
     for juju, secret, app in [
-        (juju_lxd, s3_secret, "mysql"),
-        (juju_lxd, s3_secret, "mongodb"),
-        (juju_lxd, s3_secret, "postgresql"),
-        (juju_lxd, s3_secret, "zookeeper"),
+        (juju_lxd, s3_secret_lxd, "mysql"),
+        (juju_lxd, s3_secret_lxd, "mongodb"),
+        (juju_lxd, s3_secret_lxd, "postgresql"),
+        (juju_lxd, s3_secret_lxd, "zookeeper"),
         (juju_k8s, s3_secret_k8s, "mysql-k8s"),
         (juju_k8s, s3_secret_k8s, "mongodb-k8s"),
         (juju_k8s, s3_secret_k8s, "zookeeper-k8s"),
@@ -221,7 +231,22 @@ def test_build_and_deploy(
 
     # --- Wait all to be ready ---
 
-    juju_lxd.wait(jubilant.all_active, error=jubilant.any_error, timeout=LONG_WAIT_TIMEOUT)
+    juju_lxd.wait(
+        lambda status: jubilant.all_active(
+            status,
+            "mysql-innodb",
+            "mysql",
+            "mongodb",
+            "zookeeper",
+            "etcd",
+            "easyrsa",
+            "s3-integrator-mysql",
+            "s3-integrator-mongodb",
+            "s3-integrator-zookeeper",
+        ),
+        error=jubilant.any_error,
+        timeout=LONG_WAIT_TIMEOUT,
+    )
     juju_k8s.wait(jubilant.all_active, error=jubilant.any_error, timeout=LONG_WAIT_TIMEOUT)
 
 
@@ -476,6 +501,7 @@ def test_postgresql_backup(
     juju_lxd: jubilant.Juju,
     juju_k8s: jubilant.Juju,
     k8s_host_juju: jubilant.Juju,
+    s3_secret_lxd,
     tmp_path: Path,
 ):
     postgresql_app_name = "postgresql"
@@ -484,50 +510,60 @@ def test_postgresql_backup(
     charm_revision = parse_charm_revision(postgresql_app.charm) or 0
 
     if charm_revision >= constants.POSTGRESQL_OPERATOR_MIN_REVISION:
-        minio_ip = expose_via_loadbalancer(k8s_host_juju, juju_k8s, "minio")
-        with tempfile.TemporaryDirectory() as cert_dir:
-            cert_path = Path(cert_dir) / "minio.crt"
-            key_path = Path(cert_dir) / "minio.key"
-            subprocess.run(
-                [
-                    "openssl",
-                    "req",
-                    "-x509",
-                    "-newkey",
-                    "rsa:2048",
-                    "-nodes",
-                    "-keyout",
-                    str(key_path),
-                    "-out",
-                    str(cert_path),
-                    "-days",
-                    "365",
-                    "-subj",
-                    "/CN=minio.example.test",
-                    "-addext",
-                    f"subjectAltName=IP:{minio_ip}",
-                ],
-                check=True,
-            )
-            cert_base64 = base64.b64encode(cert_path.read_bytes()).decode("ascii")
-            key_base64 = base64.b64encode(key_path.read_bytes()).decode("ascii")
+        s3_integrator_app_name = "s3-integrator-postgresql-tls"
+        if s3_integrator_app_name not in juju_lxd.status().apps:
+            minio_ip = expose_via_loadbalancer(k8s_host_juju, juju_k8s, "minio")
+            with tempfile.TemporaryDirectory() as cert_dir:
+                cert_path = Path(cert_dir) / "minio.crt"
+                key_path = Path(cert_dir) / "minio.key"
+                subprocess.run(
+                    [
+                        "openssl",
+                        "req",
+                        "-x509",
+                        "-newkey",
+                        "rsa:2048",
+                        "-nodes",
+                        "-keyout",
+                        str(key_path),
+                        "-out",
+                        str(cert_path),
+                        "-days",
+                        "365",
+                        "-subj",
+                        "/CN=minio.example.test",
+                        "-addext",
+                        f"subjectAltName=IP:{minio_ip}",
+                    ],
+                    check=True,
+                )
+                cert_base64 = base64.b64encode(cert_path.read_bytes()).decode("ascii")
+                key_base64 = base64.b64encode(key_path.read_bytes()).decode("ascii")
 
-        juju_k8s.config("minio", {"ssl-cert": cert_base64, "ssl-key": key_base64})
-        juju_k8s.wait(lambda status: jubilant.all_active(status, "minio"), timeout=WAIT_TIMEOUT)
-        juju_lxd.config(
-            "s3-integrator-postgresql",
-            {
-                "endpoint": f"https://{minio_ip}:9000",
-                "bucket": "juju-backup-all-postgresql",
-                "path": "postgresql",
-                "region": "",
-                "s3-uri-style": "path",
-                "tls-ca-chain": cert_base64,
-            },
-        )
+            juju_k8s.config("minio", {"ssl-cert": cert_base64, "ssl-key": key_base64})
+            juju_k8s.wait(
+                lambda status: jubilant.all_active(status, "minio"), timeout=WAIT_TIMEOUT
+            )
+            juju_lxd.deploy(
+                "s3-integrator",
+                app=s3_integrator_app_name,
+                channel="2/stable",
+                config={
+                    "endpoint": f"https://{minio_ip}:9000",
+                    "bucket": "juju-backup-all-postgresql",
+                    "path": "postgresql",
+                    "region": "",
+                    "s3-uri-style": "path",
+                    "tls-ca-chain": cert_base64,
+                },
+            )
+            juju_lxd.grant_secret("s3-credentials", s3_integrator_app_name)
+            juju_lxd.config(s3_integrator_app_name, {"credentials": s3_secret_lxd})
+            juju_lxd.integrate(postgresql_app_name, s3_integrator_app_name)
+
         juju_lxd.wait(
             lambda status: jubilant.all_active(
-                status, postgresql_app_name, "s3-integrator-postgresql"
+                status, postgresql_app_name, s3_integrator_app_name
             ),
             timeout=WAIT_TIMEOUT,
         )
