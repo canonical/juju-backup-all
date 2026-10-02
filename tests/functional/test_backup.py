@@ -14,9 +14,11 @@
 
 """Test juju-backup-all on multi-model controller."""
 
+import base64
 import glob
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 
 import jubilant
@@ -195,6 +197,7 @@ def test_build_and_deploy(
     for juju, secret, app in [
         (juju_lxd, s3_secret, "mysql"),
         (juju_lxd, s3_secret, "mongodb"),
+        (juju_lxd, s3_secret, "postgresql"),
         (juju_lxd, s3_secret, "zookeeper"),
         (juju_k8s, s3_secret_k8s, "mysql-k8s"),
         (juju_k8s, s3_secret_k8s, "mongodb-k8s"),
@@ -410,6 +413,7 @@ def test_zookeeper_k8s_operator_backup(juju_k8s: jubilant.Juju, tmp_path: Path):
     assert metadata_files[0].read_text() != ""
 
 
+<<<<<<< HEAD
 @pytest.mark.parametrize("backup_location", ["/home/ubuntu", "/home/ubuntu/abc"])
 def test_postgresql_backup(backup_location, juju_lxd: jubilant.Juju, tmp_path: Path):
     postgresql_app_name = "postgresql"
@@ -436,6 +440,8 @@ def test_postgresql_backup(backup_location, juju_lxd: jubilant.Juju, tmp_path: P
     assert metadata.get("backup-status") == "backup created"
 
 
+=======
+>>>>>>> 2bed025 (feat: add postgresql backup)
 @pytest.mark.parametrize("backup_location", ["/home/ubuntu/etcd-snapshots", "/home/ubuntu/abc"])
 def test_etcd_backup(backup_location, juju_lxd: jubilant.Juju, tmp_path: Path):
     etcd_app_name = "etcd"
@@ -489,6 +495,86 @@ def test_juju_client_config_backup(tmp_path: Path):
     assert config_backup_entry.get("config") == "juju"
     assert expected_output_dir.exists()
     assert glob.glob(str(expected_output_dir) + "/juju-*.gz")
+
+# postgresql backup requires minio to be exposed via load balancer and SSL certificates
+@pytest.mark.parametrize("backup_location", ["/home/ubuntu", "/home/ubuntu/abc"])
+def test_postgresql_backup(
+    backup_location,
+    juju_lxd: jubilant.Juju,
+    juju_k8s: jubilant.Juju,
+    k8s_host_juju: jubilant.Juju,
+    tmp_path: Path,
+):
+    postgresql_app_name = "postgresql"
+    model_name, controller_name = _model_and_controller(juju_lxd)
+    postgresql_app = juju_lxd.status().apps.get(postgresql_app_name)
+
+    minio_ip = expose_via_loadbalancer(k8s_host_juju, juju_k8s, "minio")
+    with tempfile.TemporaryDirectory() as cert_dir:
+        cert_path = Path(cert_dir) / "minio.crt"
+        key_path = Path(cert_dir) / "minio.key"
+        subprocess.run(
+            [
+                "openssl",
+                "req",
+                "-x509",
+                "-newkey",
+                "rsa:2048",
+                "-nodes",
+                "-keyout",
+                str(key_path),
+                "-out",
+                str(cert_path),
+                "-days",
+                "365",
+                "-subj",
+                "/CN=minio.example.test",
+                "-addext",
+                f"subjectAltName=IP:{minio_ip}",
+            ],
+            check=True,
+        )
+        cert_base64 = base64.b64encode(cert_path.read_bytes()).decode("ascii")
+        key_base64 = base64.b64encode(key_path.read_bytes()).decode("ascii")
+
+    juju_k8s.config("minio", {"ssl-cert": cert_base64, "ssl-key": key_base64})
+    juju_k8s.wait(lambda status: jubilant.all_active(status, "minio"), timeout=WAIT_TIMEOUT)
+    juju_lxd.config(
+        "s3-integrator-postgresql",
+        {
+            "endpoint": f"https://{minio_ip}:9000",
+            "bucket": "juju-backup-all-postgresql",
+            "path": "postgresql",
+            "region": "",
+            "s3-uri-style": "path",
+            "tls-ca-chain": cert_base64,
+        },
+    )
+    juju_lxd.wait(
+        lambda status: jubilant.all_active(status, postgresql_app_name, "s3-integrator-postgresql"),
+        timeout=WAIT_TIMEOUT,
+    )
+
+    exclude_opts = " -e ".join(get_supported_backup_charms_but(postgresql_app_name))
+    output = subprocess.check_output(
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j "
+        f"--backup-location-on-postgresql {backup_location}",
+        shell=True,
+    )
+    output_dict = json.loads(output)
+    expected_output_dir = tmp_path / controller_name / model_name / postgresql_app_name
+    app_backup_entries = output_dict.get("app_backups")
+    assert len(app_backup_entries) == 1
+    app_backup_entry = app_backup_entries[0]
+    assert str(tmp_path) in app_backup_entry.get("download_path")
+    assert app_backup_entry.get("controller") == controller_name
+    assert app_backup_entry.get("model") == model_name
+    assert app_backup_entry.get("charm") in postgresql_app.charm
+    assert expected_output_dir.exists()
+    metadata_files = list(expected_output_dir.glob("postgresql-backup-metadata-*.json"))
+    assert len(metadata_files) == 1
+    metadata = json.loads(metadata_files[0].read_text())
+    assert metadata.get("backup-status") == "backup created"
 
 
 @pytest.mark.juju_teardown

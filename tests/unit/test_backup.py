@@ -15,12 +15,9 @@ from jujubackupall.backup import (
     MongodbK8sOperatorBackup,
     MongodbOperatorBackup,
     MysqlInnodbBackup,
-    MysqlK8sOperatorBackup,
     MysqlOperatorBackup,
     PostgresqlBackup,
     SwiftBackup,
-    ZookeeperK8sOperatorBackup,
-    ZookeeperOperatorBackup,
     get_charm_backup_instance,
 )
 from jujubackupall.constants import (
@@ -59,8 +56,6 @@ class TestGetCharmBackupInstance(unittest.TestCase):
             ("etcd", EtcdBackup),
             ("postgresql", PostgresqlBackup),
             ("swift-proxy", SwiftBackup),
-            ("zookeeper", ZookeeperOperatorBackup),
-            ("zookeeper-k8s", ZookeeperK8sOperatorBackup),
         ]
         for charm_name, expected_backup_class in test_cases:
             with self.subTest(charm_name=charm_name, expected_backup_class=expected_backup_class):
@@ -252,6 +247,14 @@ class TestMysqlInnodbBackup(unittest.TestCase):
 
 
 class TestMysqlOperatorBackup(unittest.TestCase):
+    @patch.object(MysqlOperatorBackup, "backup_action")
+    def test_backup_mysql_operator_legacy_entrypoint(self, mock_backup_action: Mock):
+        backup = MysqlOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
+
+        backup.backup()
+
+        mock_backup_action.assert_called_once_with()
+
     @patch("jujubackupall.backup.check_output_unit_action")
     def test_backup_mysql_operator(self, mock_check_output_unit_action: Mock):
         mock_unit = Mock()
@@ -260,9 +263,9 @@ class TestMysqlOperatorBackup(unittest.TestCase):
         }
 
         backup = MysqlOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
-        backup.backup()
+        backup.backup_action()
 
-        self.assertEqual(backup.backup_id, "backup-123")
+        self.assertEqual(backup.backup_metadata, mock_check_output_unit_action.return_value)
         mock_check_output_unit_action.assert_called_once_with(
             mock_unit,
             "create-backup",
@@ -274,13 +277,14 @@ class TestMysqlOperatorBackup(unittest.TestCase):
         backup = MysqlOperatorBackup(Mock(), backup_basedir=Path("/tmp"))
 
         with self.assertRaises(BackupMetadataError):
-            backup.backup()
+            backup.backup_action()
 
     @patch("jujubackupall.backup.ensure_path_exists")
     def test_download_backup_mysql_operator(self, mock_ensure_path_exists: Mock):
         mock_unit = Mock()
         backup = MysqlOperatorBackup(mock_unit, backup_basedir=Path("/tmp"))
-        backup.backup_id = "backup-123"
+        backup.backup_metadata = {"backup-id": "backup-123"}
+        backup.backup_filepath = Path("backup-123")
 
         with patch.object(Path, "write_text", autospec=True) as mock_write_text:
             result = backup.download_backup(Path("/tmp/backup-output"))
