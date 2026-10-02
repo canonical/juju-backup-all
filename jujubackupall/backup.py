@@ -200,6 +200,12 @@ class MongodbOperatorBackup(S3Backup):
         self.backup_id = backup_id.split(maxsplit=1)[0]
 
 
+class MongodbK8sOperatorBackup(MongodbOperatorBackup):
+    """Back up the MongoDB K8s Operator through its S3-backed create-backup action."""
+
+    charm_name = "mongodb-k8s"
+
+
 class MysqlK8sOperatorBackup(MysqlBackup):
     """Back up the MySQL Operator k8s charm through its S3-backed create-backup action."""
 
@@ -465,7 +471,7 @@ def get_charm_backup_instance(
         # The charm refuses to back up using the cluster primary.
         # Note that the primary is not necessarily the leader.
         unit = get_non_primary(units, timeout)
-    elif charm_name == MongodbOperatorBackup.charm_name:
+    elif charm_name in (MongodbOperatorBackup.charm_name, MongodbK8sOperatorBackup.charm_name):
         unit = get_mongodb_primary(units, timeout)
     else:
         unit = get_leader(units)
@@ -483,6 +489,8 @@ def get_charm_backup_instance(
         )
     if charm_name == MongodbOperatorBackup.charm_name:
         return MongodbOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
+    if charm_name == MongodbK8sOperatorBackup.charm_name:
+        return MongodbK8sOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
     if charm_name == EtcdBackup.charm_name:
         return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd, timeout=timeout)
     if charm_name == PostgresqlBackup.charm_name:

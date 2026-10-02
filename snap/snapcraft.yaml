@@ -17,6 +17,7 @@ description: |
   * mysql
   * mysql-k8s
   * mongodb
+  * mongodb-k8s
   * zookeeper
   * zookeeper-k8s
 
