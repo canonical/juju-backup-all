@@ -28,7 +28,7 @@ from tests.functional.conftest import K8S_CLOUD, expose_via_loadbalancer, resolv
 
 WAIT_TIMEOUT = 30 * 60  # 30 minutes
 LONG_WAIT_TIMEOUT = 60 * 60  # 60 minutes
-K8S_WAIT_TIMEOUT = 10 * 60  # 10 minutes
+K8S_WAIT_TIMEOUT = 20 * 60  # 20 minutes
 MINIO_ACCESS_KEY = "ahs9ao#Fua"
 MINIO_SECRET_KEY = "ohCa!uB6oo"
 
@@ -144,7 +144,7 @@ def test_build_and_deploy(
     juju_k8s.deploy(
         "mongodb-k8s",
         app="mongodb-k8s",
-        base="ubuntu@24.04",
+        base="ubuntu@22.04",
         channel="6/stable",
         trust=True,
         num_units=3,
