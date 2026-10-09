@@ -13,6 +13,7 @@ description: |
   Supported charms:
   * etcd
   * postgresql
+  * postgresql-k8s
   * mysql-innodb-cluster
   * mysql
   * mysql-k8s

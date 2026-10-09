@@ -21,6 +21,7 @@ import ipaddress
 import json
 import subprocess
 from pathlib import Path
+from typing import Tuple
 
 import jubilant
 import pytest
@@ -66,7 +67,7 @@ def innodb_cluster_online(status: jubilant.Status) -> bool:
     )
 
 
-def generate_self_signed_cert(ip: str) -> tuple[bytes, bytes]:
+def generate_self_signed_cert(ip: str) -> Tuple[bytes, bytes]:
     """Return a PEM-encoded self-signed certificate and private key valid for ``ip``.
 
     The certificate is its own CA so it can be passed as the client's ``tls-ca-chain``.
@@ -198,10 +199,19 @@ def test_build_and_deploy(
     juju_lxd.deploy(
         "postgresql",
         app="postgresql",
-        base="ubuntu@22.04",
-        channel="14/stable",
-        revision=1217,
-        num_units=1,
+        base="ubuntu@24.04",
+        channel="16/stable",
+        num_units=3,
+    )
+
+    # PostgreSQL K8s
+    juju_k8s.deploy(
+        "postgresql-k8s",
+        app="postgresql-k8s",
+        base="ubuntu@24.04",
+        channel="16/stable",
+        trust=True,
+        num_units=3,
     )
 
     # MySQL
@@ -328,27 +338,31 @@ def test_build_and_deploy(
         juju.integrate(app, f"s3-integrator-{app}")
 
     minio_tls_port = expose_via_nodeport(k8s_host_juju, juju_k8s, "minio-tls", 9000)
-    juju_lxd.deploy(
-        "s3-integrator",
-        app="s3-integrator-postgresql",
-        channel="2/stable",
-        config={
-            "endpoint": f"https://{k8s_node_ip}:{minio_tls_port}",
-            "bucket": "postgresql-backups",
-            "path": "postgresql",
-            "region": "",
-            "s3-uri-style": "path",
-            "tls-ca-chain": cert_base64,
-        },
-    )
-    juju_lxd.grant_secret("s3-credentials", "s3-integrator-postgresql")
-    juju_lxd.config("s3-integrator-postgresql", {"credentials": s3_secret_lxd})
-    juju_lxd.wait(
-        lambda status: jubilant.all_active(status, "s3-integrator-postgresql"),
-        error=lambda status: jubilant.any_error(status, "s3-integrator-postgresql"),
-        timeout=WAIT_TIMEOUT,
-    )
-    juju_lxd.integrate("postgresql", "s3-integrator-postgresql")
+    for juju, secret, app in [
+        (juju_lxd, s3_secret_lxd, "postgresql"),
+        (juju_k8s, s3_secret_k8s, "postgresql-k8s"),
+    ]:
+        juju.deploy(
+            "s3-integrator",
+            app=f"s3-integrator-{app}",
+            channel="2/stable",
+            config={
+                "endpoint": f"https://{k8s_node_ip}:{minio_tls_port}",
+                "bucket": f"{app}-backups",
+                "path": app,
+                "region": "",
+                "s3-uri-style": "path",
+                "tls-ca-chain": cert_base64,
+            },
+        )
+        juju.grant_secret("s3-credentials", f"s3-integrator-{app}")
+        juju.config(f"s3-integrator-{app}", {"credentials": secret})
+        juju.wait(
+            lambda status, app=app: jubilant.all_active(status, f"s3-integrator-{app}"),
+            error=lambda status, app=app: jubilant.any_error(status, f"s3-integrator-{app}"),
+            timeout=WAIT_TIMEOUT,
+        )
+        juju.integrate(app, f"s3-integrator-{app}")
 
     # --- Wait all to be ready ---
 
@@ -648,6 +662,32 @@ def test_postgresql_backup(backup_location, juju_lxd: jubilant.Juju, tmp_path: P
     assert app_backup_entry.get("charm") in postgresql_app.charm
     assert expected_output_dir.exists()
     metadata_files = list(expected_output_dir.glob("postgresql-backup-metadata-*.json"))
+    assert len(metadata_files) == 1
+    metadata = json.loads(metadata_files[0].read_text())
+    assert metadata.get("backup-status") == "backup created"
+
+
+def test_postgresql_k8s_operator_backup(juju_k8s: jubilant.Juju, tmp_path: Path):
+    app_name = "postgresql-k8s"
+    model_name, controller_name = _model_and_controller(juju_k8s)
+    app = juju_k8s.status().apps[app_name]
+
+    exclude_opts = " -e ".join(get_supported_backup_charms_but(app_name))
+    output = subprocess.check_output(
+        f"juju-backup-all -o {tmp_path} -e {exclude_opts} -x -j ",
+        shell=True,
+    )
+    output_dict = json.loads(output)
+    expected_output_dir = tmp_path / controller_name / model_name / app_name
+    app_backup_entries = output_dict.get("app_backups")
+    assert len(app_backup_entries) == 1
+    app_backup_entry = app_backup_entries[0]
+    assert str(tmp_path) in app_backup_entry.get("download_path")
+    assert app_backup_entry.get("controller") == controller_name
+    assert app_backup_entry.get("model") == model_name
+    assert app_backup_entry.get("charm") in app.charm
+    assert expected_output_dir.exists()
+    metadata_files = list(expected_output_dir.glob(f"{app_name}-backup-metadata-*.json"))
     assert len(metadata_files) == 1
     metadata = json.loads(metadata_files[0].read_text())
     assert metadata.get("backup-status") == "backup created"

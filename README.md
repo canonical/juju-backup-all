@@ -15,6 +15,7 @@ It currently supports backing up juju controllers, juju configs, and the followi
 - [MongoDB](https://charmhub.io/mongodb)
 - [MongoDB K8s](https://charmhub.io/mongodb-k8s)
 - [PostgreSQL](https://charmhub.io/postgresql)
+- [PostgreSQL K8s](https://charmhub.io/postgresql-k8s)
 - [etcd](https://charmhub.io/etcd)
 - [ZooKeeper](https://charmhub.io/zookeeper)
 - [ZooKeeper K8s](https://charmhub.io/zookeeper-k8s)
