@@ -18,6 +18,7 @@ from jujubackupall.backup import (
     MysqlInnodbBackup,
     MysqlK8sOperatorBackup,
     MysqlOperatorBackup,
+    PostgresqlK8sOperatorBackup,
     PostgresqlOperatorBackup,
     SwiftBackup,
     ZookeeperK8sOperatorBackup,
@@ -102,6 +103,13 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                 POSTGRESQL_OPERATOR_MIN_REVISION - 1,
                 create_backup_action,
             ),
+            (
+                "postgresql-k8s",
+                PostgresqlK8sOperatorBackup,
+                None,
+                {**primary_action, **create_backup_action},
+            ),
+            ("postgresql-k8s", PostgresqlK8sOperatorBackup, None, create_backup_action),
             ("swift-proxy", SwiftBackup, None, {}),
         ]
         for charm_name, expected_backup_class, charm_revision, charm_actions in test_cases:
@@ -131,7 +139,7 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                     else:
                         mock_get_mongodb_primary.assert_not_called()
                         mock_get_leader.assert_called_once_with([ANY])
-                elif charm_name == "postgresql":
+                elif charm_name in ("postgresql", "postgresql-k8s"):
                     if "get-primary" in charm_actions:
                         mock_get_postgresql_primary.assert_called_once_with([ANY], ANY)
                         mock_get_leader.assert_not_called()
@@ -738,6 +746,33 @@ class TestPostgresqlOperatorBackup(unittest.TestCase):
         mock_write_text.assert_called_once_with(
             metadata_path,
             json.dumps(backup.backup_metadata, indent=2, sort_keys=True),
+        )
+
+
+class TestPostgresqlK8sOperatorBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.get_datetime_string", return_value="20261002-120000")
+    @patch("jujubackupall.backup.ensure_path_exists")
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_and_download(
+        self, mock_action: Mock, mock_ensure_path_exists: Mock, mock_datetime: Mock
+    ):
+        action_output = {"backup-status": "backup created"}
+        mock_action.return_value = action_output
+        unit = Mock()
+        backup = PostgresqlK8sOperatorBackup(unit, backup_basedir=Path("/home/ubuntu"))
+        save_path = Path("backup-output")
+
+        backup.backup()
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(save_path)
+
+        metadata_path = save_path / "postgresql-k8s-backup-metadata-20261002-120000.json"
+        mock_action.assert_called_once_with(unit, "create-backup", DEFAULT_TASK_TIMEOUT)
+        self.assertEqual(backup.backup_metadata, action_output)
+        self.assertEqual(result, metadata_path.absolute())
+        mock_ensure_path_exists.assert_called_once_with(path=save_path)
+        mock_write_text.assert_called_once_with(
+            metadata_path, json.dumps(action_output, indent=2, sort_keys=True)
         )
 
 

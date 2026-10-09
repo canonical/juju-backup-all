@@ -288,7 +288,13 @@ class TestControllerProcessor(unittest.TestCase):
         mock_run_async.return_value = postgresql_actions
         apps = [
             self.create_app_tuple(app_name)
-            for app_name in ["mysql-innodb-cluster", "postgresql", "mongodb", "my-app"]
+            for app_name in [
+                "mysql-innodb-cluster",
+                "postgresql",
+                "postgresql-k8s",
+                "mongodb",
+                "my-app",
+            ]
         ]
         apps_dict = dict()
         for app_name, app in apps:
@@ -321,6 +327,16 @@ class TestControllerProcessor(unittest.TestCase):
                 charm_actions=postgresql_actions,
             ),
             call(
+                charm_name="postgresql-k8s",
+                units=ANY,
+                backup_location_on_postgresql=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+                backup_location_on_mysql=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+                backup_location_on_etcd=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+                timeout=ANY,
+                charm_revision=1,
+                charm_actions=postgresql_actions,
+            ),
+            call(
                 charm_name="mongodb",
                 units=ANY,
                 backup_location_on_postgresql=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
@@ -332,7 +348,7 @@ class TestControllerProcessor(unittest.TestCase):
             ),
         ]
         mock_get_backup_instance.assert_has_calls(calls_get_backup_instance, any_order=True)
-        self.assertEqual(mock_run_async.call_count, 2)
+        self.assertEqual(mock_run_async.call_count, 3)
         mock_generate_full_backup_path.assert_called()
 
     @patch("jujubackupall.process.get_charm_backup_instance")

@@ -286,6 +286,12 @@ class PostgresqlOperatorBackup(CharmBackup):
         return metadata_path.absolute()
 
 
+class PostgresqlK8sOperatorBackup(PostgresqlOperatorBackup):
+    """Back up the PostgreSQL K8s operator through its create-backup action."""
+
+    charm_name = "postgresql-k8s"
+
+
 class SwiftBackup(CharmBackup):
     charm_name = "swift-proxy"
 
@@ -511,7 +517,10 @@ def get_charm_backup_instance(
             if "get-primary" in charm_actions
             else get_leader(units)
         )
-    elif charm_name == PostgresqlOperatorBackup.charm_name:
+    elif charm_name in (
+        PostgresqlOperatorBackup.charm_name,
+        PostgresqlK8sOperatorBackup.charm_name,
+    ):
         unit = (
             get_postgresql_primary(units, timeout)
             if "get-primary" in charm_actions
@@ -551,6 +560,10 @@ def get_charm_backup_instance(
             unit=unit,
             backup_basedir=backup_location_on_postgresql,
             timeout=timeout,
+        )
+    if charm_name == PostgresqlK8sOperatorBackup.charm_name:
+        return PostgresqlK8sOperatorBackup(
+            unit=unit, backup_basedir=backup_location_on_postgresql, timeout=timeout
         )
     if charm_name == ZookeeperOperatorBackup.charm_name:
         return ZookeeperOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)

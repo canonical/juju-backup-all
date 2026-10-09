@@ -198,7 +198,7 @@ class ControllerProcessor:
         try:
             charm_actions = (
                 run_async(app.get_actions())
-                if charm_name in ("postgresql", "mongodb", "mongodb-k8s")
+                if charm_name in ("postgresql", "postgresql-k8s", "mongodb", "mongodb-k8s")
                 else None
             )
             charm_backup_instance = get_charm_backup_instance(
