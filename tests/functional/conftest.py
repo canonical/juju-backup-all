@@ -96,6 +96,34 @@ def expose_via_loadbalancer(
     ).strip()
 
 
+def expose_via_nodeport(
+    k8s_host_juju: jubilant.Juju, juju_k8s: jubilant.Juju, app: str, port: int
+) -> int:
+    """Patch ``app``'s Kubernetes Service to type NodePort.
+
+    Returns the node port mapped to ``port``, reachable on the ``k8s`` unit's address. Use this
+    when the single LoadBalancer IP is already taken. Runs ``kubectl`` over SSH via the model
+    hosting the ``k8s`` charm.
+    """
+    assert juju_k8s.model is not None
+    model = juju_k8s.model.rpartition(":")[-1]
+    k8s_host_juju.ssh(
+        "k8s/0",
+        "sudo k8s kubectl",
+        f"-n {model} patch svc {app}",
+        '-p \'{"spec": {"type": "NodePort"}}\'',
+    )
+    return int(
+        k8s_host_juju.ssh(
+            "k8s/0",
+            "sudo k8s kubectl",
+            f"-n {model} get svc {app}",
+            "-o",
+            f"jsonpath='{{.spec.ports[?(@.port=={port})].nodePort}}'",
+        ).strip()
+    )
+
+
 def resolve_controller_name(request: pytest.FixtureRequest) -> str:
     """Return --juju-controller if given, else the currently active controller."""
     juju = jubilant.Juju()

@@ -274,15 +274,22 @@ class TestControllerProcessor(unittest.TestCase):
     @patch("jujubackupall.process.ControllerProcessor.generate_full_backup_path")
     @patch("jujubackupall.process.ControllerProcessor._log")
     @patch("jujubackupall.process.get_charm_backup_instance")
+    @patch("jujubackupall.process.run_async")
     def test_backup_apps_all_supported(
         self,
+        mock_run_async: Mock,
         mock_get_backup_instance: Mock,
         mock_generate_full_backup_path: Mock,
         mock_log: Mock,
     ):
         model_name = "my-model"
         mock_model = Mock()
-        apps = [self.create_app_tuple(app_name) for app_name in ["mysql-innodb-cluster", "my-app"]]
+        postgresql_actions = {"get-primary": "Get the primary unit."}
+        mock_run_async.return_value = postgresql_actions
+        apps = [
+            self.create_app_tuple(app_name)
+            for app_name in ["mysql-innodb-cluster", "postgresql", "mongodb", "my-app"]
+        ]
         apps_dict = dict()
         for app_name, app in apps:
             apps_dict[app_name] = app
@@ -300,9 +307,32 @@ class TestControllerProcessor(unittest.TestCase):
                 backup_location_on_mysql=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
                 backup_location_on_etcd=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
                 timeout=ANY,
+                charm_revision=1,
+                charm_actions=None,
+            ),
+            call(
+                charm_name="postgresql",
+                units=ANY,
+                backup_location_on_postgresql=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+                backup_location_on_mysql=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+                backup_location_on_etcd=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+                timeout=ANY,
+                charm_revision=1,
+                charm_actions=postgresql_actions,
+            ),
+            call(
+                charm_name="mongodb",
+                units=ANY,
+                backup_location_on_postgresql=Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+                backup_location_on_mysql=Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+                backup_location_on_etcd=Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+                timeout=ANY,
+                charm_revision=1,
+                charm_actions=postgresql_actions,
             ),
         ]
         mock_get_backup_instance.assert_has_calls(calls_get_backup_instance, any_order=True)
+        self.assertEqual(mock_run_async.call_count, 2)
         mock_generate_full_backup_path.assert_called()
 
     @patch("jujubackupall.process.get_charm_backup_instance")

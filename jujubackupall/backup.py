@@ -24,14 +24,18 @@ from abc import ABCMeta, abstractmethod
 from datetime import datetime
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List, TypeVar
+from typing import Dict, List, Optional, TypeVar
 
 import attr
 from juju.controller import Controller
 from juju.errors import JujuAPIError
 from juju.unit import Unit
 
-from jujubackupall.constants import DEFAULT_TASK_TIMEOUT, MAX_CONTROLLER_BACKUP_RETRIES
+from jujubackupall.constants import (
+    DEFAULT_TASK_TIMEOUT,
+    MAX_CONTROLLER_BACKUP_RETRIES,
+    POSTGRESQL_OPERATOR_MIN_REVISION,
+)
 from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
 from jujubackupall.utils import (
     backup_controller,
@@ -41,6 +45,7 @@ from jujubackupall.utils import (
     get_leader,
     get_mongodb_primary,
     get_non_primary,
+    get_postgresql_primary,
     scp_from_unit,
     ssh_run_on_unit,
 )
@@ -146,6 +151,7 @@ class MysqlBackup(S3Backup, metaclass=ABCMeta):
     def backup(self):
         action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
         self.backup_id = action_output.get("backup-id")
+        self.backup_metadata = action_output
 
         if not self.backup_id:
             raise BackupMetadataError("create-backup did not return backup metadata")
@@ -183,6 +189,12 @@ class MysqlOperatorBackup(MysqlBackup):
     charm_name = "mysql"
 
 
+class MysqlK8sOperatorBackup(MysqlBackup):
+    """Back up the MySQL Operator k8s charm through its S3-backed create-backup action."""
+
+    charm_name = "mysql-k8s"
+
+
 class MongodbOperatorBackup(S3Backup):
     """Back up the MongoDB Operator charm through its S3-backed create-backup action."""
 
@@ -204,12 +216,6 @@ class MongodbK8sOperatorBackup(MongodbOperatorBackup):
     """Back up the MongoDB K8s Operator through its S3-backed create-backup action."""
 
     charm_name = "mongodb-k8s"
-
-
-class MysqlK8sOperatorBackup(MysqlBackup):
-    """Back up the MySQL Operator k8s charm through its S3-backed create-backup action."""
-
-    charm_name = "mysql-k8s"
 
 
 class ZookeeperOperatorBackup(ZooKeeperBackup):
@@ -239,20 +245,45 @@ class EtcdBackup(CharmBackup):
         self.backup_filepath = Path(action_output.get("snapshot").get("path"))
 
 
-class PostgresqlBackup(CharmBackup):
+class LegacyPostgresqlOperatorBackup(CharmBackup):
+    """Back up the reactive PostgreSQL charm using pg_dumpall."""
+
     charm_name = "postgresql"
     date_suffix = datetime.now().strftime("%Y%m%d%H%M%S")
     pgdump_filename = f"pgdump-all-databases-{date_suffix}.gz"
 
     def backup(self):
-        # we only need to create directory for postgres because mysql and etcd
-        # charms will create the directory by themselves
+        self.backup_dump()
+
+    def backup_dump(self):
+        """Create a local dump using the reactive PostgreSQL backup method."""
         ssh_run_on_unit(
             unit=self.unit, command=f"mkdir -p {self.backup_basedir}", timeout=self.timeout
         )
         self.backup_filepath = self.backup_basedir / self.pgdump_filename
         backup_cmd = f"sudo -u postgres pg_dumpall | gzip > {self.backup_filepath}"
         ssh_run_on_unit(unit=self.unit, command=backup_cmd, timeout=self.timeout)
+
+
+class PostgresqlOperatorBackup(CharmBackup):
+    """Back up the PostgreSQL VM operator through its create-backup action."""
+
+    charm_name = "postgresql"
+    backup_action_name = "create-backup"
+
+    def backup(self):
+        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
+        self.backup_metadata = action_output
+
+        if not action_output.get("backup-status"):
+            raise BackupMetadataError("create-backup did not return backup metadata")
+
+    def download_backup(self, save_path: Path) -> Path:
+        ensure_path_exists(path=save_path)
+        metadata_filename = f"{self.charm_name}-backup-metadata-{get_datetime_string()}.json"
+        metadata_path = save_path / metadata_filename
+        metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
+        return metadata_path.absolute()
 
 
 class SwiftBackup(CharmBackup):
@@ -466,13 +497,26 @@ def get_charm_backup_instance(
     backup_location_on_mysql: Path,
     backup_location_on_etcd: Path,
     timeout: int,
+    charm_revision: Optional[int] = None,
+    charm_actions: Optional[Dict] = None,
 ) -> CharmBackupType:
+    charm_actions = charm_actions or {}
     if charm_name in (MysqlOperatorBackup.charm_name, MysqlK8sOperatorBackup.charm_name):
         # The charm refuses to back up using the cluster primary.
         # Note that the primary is not necessarily the leader.
         unit = get_non_primary(units, timeout)
     elif charm_name in (MongodbOperatorBackup.charm_name, MongodbK8sOperatorBackup.charm_name):
-        unit = get_mongodb_primary(units, timeout)
+        unit = (
+            get_mongodb_primary(units, timeout)
+            if "get-primary" in charm_actions
+            else get_leader(units)
+        )
+    elif charm_name == PostgresqlOperatorBackup.charm_name:
+        unit = (
+            get_postgresql_primary(units, timeout)
+            if "get-primary" in charm_actions
+            else get_leader(units)
+        )
     else:
         unit = get_leader(units)
     if charm_name == MysqlInnodbBackup.charm_name:
@@ -493,9 +537,20 @@ def get_charm_backup_instance(
         return MongodbK8sOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
     if charm_name == EtcdBackup.charm_name:
         return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd, timeout=timeout)
-    if charm_name == PostgresqlBackup.charm_name:
-        return PostgresqlBackup(
-            unit=unit, backup_basedir=backup_location_on_postgresql, timeout=timeout
+    if charm_name == PostgresqlOperatorBackup.charm_name:
+        backup_class = (
+            PostgresqlOperatorBackup
+            if (
+                charm_revision is not None
+                and charm_revision >= POSTGRESQL_OPERATOR_MIN_REVISION
+                and "create-backup" in charm_actions
+            )
+            else LegacyPostgresqlOperatorBackup
+        )
+        return backup_class(
+            unit=unit,
+            backup_basedir=backup_location_on_postgresql,
+            timeout=timeout,
         )
     if charm_name == ZookeeperOperatorBackup.charm_name:
         return ZookeeperOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
