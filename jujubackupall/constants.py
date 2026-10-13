@@ -26,6 +26,7 @@ SUPPORTED_BACKUP_CHARMS = [
     "mongodb-k8s",
     "etcd",
     "postgresql",
+    "postgresql-k8s",
     "zookeeper",
     "zookeeper-k8s",
 ]

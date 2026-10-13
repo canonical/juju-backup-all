@@ -36,14 +36,13 @@ from jujubackupall.constants import (
     MAX_CONTROLLER_BACKUP_RETRIES,
     POSTGRESQL_OPERATOR_MIN_REVISION,
 )
-from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
+from jujubackupall.errors import ActionError, BackupMetadataError, JujuControllerBackupError
 from jujubackupall.utils import (
     backup_controller,
     check_output_unit_action,
     ensure_path_exists,
     get_datetime_string,
     get_leader,
-    get_mongodb_primary,
     get_non_primary,
     get_postgresql_primary,
     scp_from_unit,
@@ -266,17 +265,52 @@ class LegacyPostgresqlOperatorBackup(CharmBackup):
 
 
 class PostgresqlOperatorBackup(CharmBackup):
-    """Back up the PostgreSQL VM operator through its create-backup action."""
+    """Back up the PostgreSQL VM operator through its create-backup action.
+
+    The unit the charm accepts the backup on depends on its track: PostgreSQL 16 refuses the
+    primary whenever there are replicas, while PostgreSQL 14 only accepts a replica when TLS
+    is enabled and otherwise requires the primary. Rather than detecting either from outside,
+    the action is tried on ``unit`` and then on each of ``fallback_units`` in turn, moving on
+    only when the charm rejects the unit itself.
+    """
 
     charm_name = "postgresql"
     backup_action_name = "create-backup"
+    # The charm fails create-backup with a message starting with this when the unit it ran on
+    # is not eligible to take the backup (e.g. the primary, or a replica without TLS).
+    unit_rejected_message_prefix = "Unit cannot perform backups"
+
+    def __init__(
+        self,
+        unit: Unit,
+        backup_basedir: Path,
+        timeout: int = DEFAULT_TASK_TIMEOUT,
+        fallback_units: Optional[List[Unit]] = None,
+    ):
+        super().__init__(unit, backup_basedir, timeout)
+        self.fallback_units = fallback_units or []
 
     def backup(self):
-        action_output = check_output_unit_action(self.unit, self.backup_action_name, self.timeout)
+        action_output = self._run_backup_action()
         self.backup_metadata = action_output
 
         if not action_output.get("backup-status"):
             raise BackupMetadataError("create-backup did not return backup metadata")
+
+    def _run_backup_action(self) -> dict:
+        *candidates, last_unit = [self.unit, *self.fallback_units]
+        for unit in candidates:
+            try:
+                return check_output_unit_action(unit, self.backup_action_name, self.timeout)
+            except ActionError as error:
+                if not error.message().startswith(self.unit_rejected_message_prefix):
+                    raise
+                logger.info(
+                    "Unit %s cannot take the backup, trying the next unit: %s",
+                    unit.name,
+                    error.message(),
+                )
+        return check_output_unit_action(last_unit, self.backup_action_name, self.timeout)
 
     def download_backup(self, save_path: Path) -> Path:
         ensure_path_exists(path=save_path)
@@ -284,6 +318,12 @@ class PostgresqlOperatorBackup(CharmBackup):
         metadata_path = save_path / metadata_filename
         metadata_path.write_text(json.dumps(self.backup_metadata, indent=2, sort_keys=True))
         return metadata_path.absolute()
+
+
+class PostgresqlK8sOperatorBackup(PostgresqlOperatorBackup):
+    """Back up the PostgreSQL K8s operator through its create-backup action."""
+
+    charm_name = "postgresql-k8s"
 
 
 class SwiftBackup(CharmBackup):
@@ -505,13 +545,10 @@ def get_charm_backup_instance(
         # The charm refuses to back up using the cluster primary.
         # Note that the primary is not necessarily the leader.
         unit = get_non_primary(units, timeout)
-    elif charm_name in (MongodbOperatorBackup.charm_name, MongodbK8sOperatorBackup.charm_name):
-        unit = (
-            get_mongodb_primary(units, timeout)
-            if "get-primary" in charm_actions
-            else get_leader(units)
-        )
-    elif charm_name == PostgresqlOperatorBackup.charm_name:
+    elif charm_name in (
+        PostgresqlOperatorBackup.charm_name,
+        PostgresqlK8sOperatorBackup.charm_name,
+    ):
         unit = (
             get_postgresql_primary(units, timeout)
             if "get-primary" in charm_actions
@@ -537,20 +574,28 @@ def get_charm_backup_instance(
         return MongodbK8sOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
     if charm_name == EtcdBackup.charm_name:
         return EtcdBackup(unit=unit, backup_basedir=backup_location_on_etcd, timeout=timeout)
-    if charm_name == PostgresqlOperatorBackup.charm_name:
+    if charm_name == PostgresqlOperatorBackup.charm_name and not (
+        charm_revision is not None
+        and charm_revision >= POSTGRESQL_OPERATOR_MIN_REVISION
+        and "create-backup" in charm_actions
+    ):
+        return LegacyPostgresqlOperatorBackup(
+            unit=unit, backup_basedir=backup_location_on_postgresql, timeout=timeout
+        )
+    if charm_name in (PostgresqlOperatorBackup.charm_name, PostgresqlK8sOperatorBackup.charm_name):
+        # Try the replicas before the primary, which PostgreSQL 16 rejects whenever there are
+        # replicas, and keep the primary as the fallback for PostgreSQL 14 without TLS.
+        backup_unit, *fallback_units = [u for u in units if u is not unit] + [unit]
         backup_class = (
             PostgresqlOperatorBackup
-            if (
-                charm_revision is not None
-                and charm_revision >= POSTGRESQL_OPERATOR_MIN_REVISION
-                and "create-backup" in charm_actions
-            )
-            else LegacyPostgresqlOperatorBackup
+            if charm_name == PostgresqlOperatorBackup.charm_name
+            else PostgresqlK8sOperatorBackup
         )
         return backup_class(
-            unit=unit,
+            unit=backup_unit,
             backup_basedir=backup_location_on_postgresql,
             timeout=timeout,
+            fallback_units=fallback_units,
         )
     if charm_name == ZookeeperOperatorBackup.charm_name:
         return ZookeeperOperatorBackup(unit=unit, backup_basedir="/home/ubuntu", timeout=timeout)
