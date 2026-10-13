@@ -18,6 +18,7 @@ from jujubackupall.backup import (
     MysqlInnodbBackup,
     MysqlK8sOperatorBackup,
     MysqlOperatorBackup,
+    PostgresqlK8sOperatorBackup,
     PostgresqlOperatorBackup,
     SwiftBackup,
     ZookeeperK8sOperatorBackup,
@@ -32,24 +33,25 @@ from jujubackupall.constants import (
     MAX_CONTROLLER_BACKUP_RETRIES,
     POSTGRESQL_OPERATOR_MIN_REVISION,
 )
-from jujubackupall.errors import BackupMetadataError, JujuControllerBackupError
+from jujubackupall.errors import ActionError, BackupMetadataError, JujuControllerBackupError
+
+
+def _action_error(message: str) -> ActionError:
+    return ActionError(Mock(safe_data={"status": "failed", "message": message}))
 
 
 class TestGetCharmBackupInstance(unittest.TestCase):
     @patch("jujubackupall.backup.get_postgresql_primary")
     @patch("jujubackupall.backup.get_non_primary")
-    @patch("jujubackupall.backup.get_mongodb_primary")
     @patch("jujubackupall.backup.get_leader")
     def test_get_backup_instance(
         self,
         mock_get_leader: Mock,
-        mock_get_mongodb_primary: Mock,
         mock_get_non_primary: Mock,
         mock_get_postgresql_primary: Mock,
     ):
         mock_unit = Mock()
         mock_get_leader.return_value = mock_unit
-        mock_get_mongodb_primary.return_value = mock_unit
         mock_get_non_primary.return_value = mock_unit
         mock_get_postgresql_primary.return_value = mock_unit
         primary_action = {"get-primary": "Get the primary unit."}
@@ -58,19 +60,8 @@ class TestGetCharmBackupInstance(unittest.TestCase):
             ("mysql-innodb-cluster", MysqlInnodbBackup, None, {}),
             ("mysql", MysqlOperatorBackup, None, {}),
             ("mysql-k8s", MysqlK8sOperatorBackup, None, {}),
-            (
-                "mongodb",
-                MongodbOperatorBackup,
-                None,
-                primary_action,
-            ),
-            (
-                "mongodb-k8s",
-                MongodbK8sOperatorBackup,
-                None,
-                primary_action,
-            ),
-            ("mongodb", MongodbOperatorBackup, None, create_backup_action),
+            ("mongodb", MongodbOperatorBackup, None, {}),
+            ("mongodb-k8s", MongodbK8sOperatorBackup, None, {}),
             ("etcd", EtcdBackup, None, {}),
             (
                 "postgresql",
@@ -102,12 +93,18 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                 POSTGRESQL_OPERATOR_MIN_REVISION - 1,
                 create_backup_action,
             ),
+            (
+                "postgresql-k8s",
+                PostgresqlK8sOperatorBackup,
+                None,
+                {**primary_action, **create_backup_action},
+            ),
+            ("postgresql-k8s", PostgresqlK8sOperatorBackup, None, create_backup_action),
             ("swift-proxy", SwiftBackup, None, {}),
         ]
         for charm_name, expected_backup_class, charm_revision, charm_actions in test_cases:
             with self.subTest(charm_name=charm_name, expected_backup_class=expected_backup_class):
                 mock_get_non_primary.reset_mock()
-                mock_get_mongodb_primary.reset_mock()
                 mock_get_postgresql_primary.reset_mock()
                 mock_get_leader.reset_mock()
                 backup_instance = get_charm_backup_instance(
@@ -125,13 +122,10 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                     mock_get_non_primary.assert_called_once()
                     mock_get_leader.assert_not_called()
                 elif charm_name in ("mongodb", "mongodb-k8s"):
-                    if "get-primary" in charm_actions:
-                        mock_get_mongodb_primary.assert_called_once_with([ANY], ANY)
-                        mock_get_leader.assert_not_called()
-                    else:
-                        mock_get_mongodb_primary.assert_not_called()
-                        mock_get_leader.assert_called_once_with([ANY])
-                elif charm_name == "postgresql":
+                    # The charm only accepts create-backup on the leader.
+                    mock_get_leader.assert_called_once_with([ANY])
+                    mock_get_postgresql_primary.assert_not_called()
+                elif charm_name in ("postgresql", "postgresql-k8s"):
                     if "get-primary" in charm_actions:
                         mock_get_postgresql_primary.assert_called_once_with([ANY], ANY)
                         mock_get_leader.assert_not_called()
@@ -143,6 +137,64 @@ class TestGetCharmBackupInstance(unittest.TestCase):
                     mock_get_non_primary.assert_not_called()
                     if charm_name in ("zookeeper", "zookeeper-k8s"):
                         mock_get_leader.assert_called()
+
+    @patch("jujubackupall.backup.get_postgresql_primary")
+    def test_postgresql_operator_tries_replicas_before_primary(
+        self, mock_get_postgresql_primary: Mock
+    ):
+        units = [Mock(), Mock(), Mock()]
+        mock_get_postgresql_primary.return_value = units[1]
+        actions = {"get-primary": "Get the primary unit.", "create-backup": "Create a backup."}
+        for charm_name, charm_revision in [
+            ("postgresql", POSTGRESQL_OPERATOR_MIN_REVISION),
+            ("postgresql-k8s", None),
+        ]:
+            with self.subTest(charm_name=charm_name):
+                backup_instance = get_charm_backup_instance(
+                    charm_name,
+                    units,
+                    Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+                    Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+                    Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+                    ANY,
+                    charm_revision=charm_revision,
+                    charm_actions=actions,
+                )
+                self.assertIs(backup_instance.unit, units[0])
+                self.assertEqual(backup_instance.fallback_units, [units[2], units[1]])
+
+    @patch("jujubackupall.backup.get_postgresql_primary")
+    def test_postgresql_operator_single_unit_uses_primary(self, mock_get_postgresql_primary: Mock):
+        unit = Mock()
+        mock_get_postgresql_primary.return_value = unit
+        backup_instance = get_charm_backup_instance(
+            "postgresql-k8s",
+            [unit],
+            Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+            Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+            Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+            ANY,
+            charm_actions={"get-primary": "Get the primary unit."},
+        )
+        self.assertIs(backup_instance.unit, unit)
+        self.assertEqual(backup_instance.fallback_units, [])
+
+    @patch("jujubackupall.backup.get_postgresql_primary")
+    def test_legacy_postgresql_uses_primary(self, mock_get_postgresql_primary: Mock):
+        units = [Mock(), Mock()]
+        mock_get_postgresql_primary.return_value = units[1]
+        backup_instance = get_charm_backup_instance(
+            "postgresql",
+            units,
+            Path(DEFAULT_BACKUP_LOCATION_ON_POSTGRESQL_UNIT),
+            Path(DEFAULT_BACKUP_LOCATION_ON_MYSQL_UNIT),
+            Path(DEFAULT_BACKUP_LOCATION_ON_ETCD_UNIT),
+            ANY,
+            charm_revision=POSTGRESQL_OPERATOR_MIN_REVISION - 1,
+            charm_actions={"get-primary": "Get the primary unit."},
+        )
+        self.assertIsInstance(backup_instance, LegacyPostgresqlOperatorBackup)
+        self.assertIs(backup_instance.unit, units[1])
 
 
 class TestJujuControllerBackup(unittest.TestCase):
@@ -710,6 +762,59 @@ class TestPostgresqlOperatorBackup(unittest.TestCase):
             mock_unit, "create-backup", DEFAULT_TASK_TIMEOUT
         )
 
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_falls_back_to_next_unit_when_rejected(
+        self, mock_check_output_unit_action: Mock
+    ):
+        # PostgreSQL 14 without TLS rejects replicas, so only the primary (last) succeeds.
+        replica_0, replica_1, primary = Mock(), Mock(), Mock()
+        action_output = {"backup-status": "backup created"}
+        mock_check_output_unit_action.side_effect = [
+            _action_error("Unit cannot perform backups as TLS is not enabled"),
+            _action_error("Unit cannot perform backups as TLS is not enabled"),
+            action_output,
+        ]
+
+        backup = PostgresqlOperatorBackup(
+            replica_0, backup_basedir=Path("/home/ubuntu"), fallback_units=[replica_1, primary]
+        )
+        backup.backup()
+
+        self.assertEqual(backup.backup_metadata, action_output)
+        self.assertEqual(
+            [c.args[0] for c in mock_check_output_unit_action.call_args_list],
+            [replica_0, replica_1, primary],
+        )
+
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_does_not_fall_back_on_other_errors(self, mock_check_output_unit_action: Mock):
+        mock_check_output_unit_action.side_effect = _action_error("Stanza was not initialised")
+        unit, fallback_unit = Mock(), Mock()
+
+        backup = PostgresqlOperatorBackup(
+            unit, backup_basedir=Path("/home/ubuntu"), fallback_units=[fallback_unit]
+        )
+        with self.assertRaises(ActionError):
+            backup.backup()
+
+        mock_check_output_unit_action.assert_called_once_with(
+            unit, "create-backup", DEFAULT_TASK_TIMEOUT
+        )
+
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_raises_when_every_unit_rejects(self, mock_check_output_unit_action: Mock):
+        mock_check_output_unit_action.side_effect = _action_error(
+            "Unit cannot perform backups as it is the cluster primary"
+        )
+
+        backup = PostgresqlOperatorBackup(
+            Mock(), backup_basedir=Path("/home/ubuntu"), fallback_units=[Mock()]
+        )
+        with self.assertRaises(ActionError):
+            backup.backup()
+
+        self.assertEqual(mock_check_output_unit_action.call_count, 2)
+
     @patch("jujubackupall.backup.check_output_unit_action", return_value={})
     def test_backup_postgresql_operator_requires_metadata(
         self, mock_check_output_unit_action: Mock
@@ -738,6 +843,33 @@ class TestPostgresqlOperatorBackup(unittest.TestCase):
         mock_write_text.assert_called_once_with(
             metadata_path,
             json.dumps(backup.backup_metadata, indent=2, sort_keys=True),
+        )
+
+
+class TestPostgresqlK8sOperatorBackup(unittest.TestCase):
+    @patch("jujubackupall.backup.get_datetime_string", return_value="20261002-120000")
+    @patch("jujubackupall.backup.ensure_path_exists")
+    @patch("jujubackupall.backup.check_output_unit_action")
+    def test_backup_and_download(
+        self, mock_action: Mock, mock_ensure_path_exists: Mock, mock_datetime: Mock
+    ):
+        action_output = {"backup-status": "backup created"}
+        mock_action.return_value = action_output
+        unit = Mock()
+        backup = PostgresqlK8sOperatorBackup(unit, backup_basedir=Path("/home/ubuntu"))
+        save_path = Path("backup-output")
+
+        backup.backup()
+        with patch.object(Path, "write_text", autospec=True) as mock_write_text:
+            result = backup.download_backup(save_path)
+
+        metadata_path = save_path / "postgresql-k8s-backup-metadata-20261002-120000.json"
+        mock_action.assert_called_once_with(unit, "create-backup", DEFAULT_TASK_TIMEOUT)
+        self.assertEqual(backup.backup_metadata, action_output)
+        self.assertEqual(result, metadata_path.absolute())
+        mock_ensure_path_exists.assert_called_once_with(path=save_path)
+        mock_write_text.assert_called_once_with(
+            metadata_path, json.dumps(action_output, indent=2, sort_keys=True)
         )
 
 

@@ -90,6 +90,9 @@ class ActionError(Exception):
     def results(self) -> dict:
         return self.action.safe_data.get("results")
 
+    def message(self) -> str:
+        return self.action.safe_data.get("message") or ""
+
 
 class NoLeaderError(Exception):
     def __init__(self, units: List[Unit]):
